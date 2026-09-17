@@ -1,0 +1,29 @@
+[build]
+  base = "chill-and-sip"
+  command = "npm run build"
+  publish = "dist"
+  # Every git push to main was auto-triggering a full production build (consuming build
+  # credits) even for commits meant only for local testing. `$CONTEXT` is Netlify's
+  # deploy-context env var, set to "production" for a build that would publish straight
+  # to varietyh2o.com (i.e. any push, direct or merged-PR, to the production branch/main)
+  # and "deploy-preview" for a build tied to an open pull request. This skips (exit 0)
+  # only the "production" case; everything else -- most importantly deploy-preview builds
+  # for open PRs -- still builds normally (exit 1), so opening a PR gets you a real preview
+  # URL to review before merging. Deploy to production only by manually triggering a build
+  # (Netlify dashboard "Trigger deploy" button, `netlify deploy --build --prod`, or a POST
+  # to the Netlify API's /sites/{site_id}/builds endpoint) when ready to go live -- manual/
+  # API/build-hook triggers are never affected by this `ignore` check regardless of context.
+  # To go back to auto-deploy-on-push, delete this line.
+  ignore = '[ "$CONTEXT" = "production" ] && exit 0 || exit 1'
+
+[build.environment]
+  # vite@7.3.2 requires Node ^20.19.0 || >=22.12.0; pin explicitly rather than rely on
+  # Netlify's default build image, which may be older.
+  NODE_VERSION = "22"
+
+# Client-side routing (react-router-dom): let the app handle every path itself instead of
+# Netlify 404ing on a direct link or hard refresh to /login, /claim, etc.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

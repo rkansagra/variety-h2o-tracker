@@ -1,0 +1,15 @@
+### IntelliJ IDEA ###
+.idea/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+### Customer/business data exports (never goes into git history) ###
+existing_prepaid.csv
+MLWX*_catalog-*.csv
+
+### Netlify CLI local state ###
+.netlify/
