@@ -6,14 +6,24 @@ import { ScreenOrientation } from '@capacitor/screen-orientation'
 import './index.css'
 import RewardsApp from './App.jsx'
 
+// Phones stay portrait; tablets (shortest screen side >= 600dp, the same line as the app's tablet
+// size class) rotate freely. The Android manifest no longer forces portrait, so this is the only
+// lock. On the web it's a no-op -- the installed web app has no orientation lock either.
+function isPhoneSizedScreen() {
+  return Math.min(window.screen.width, window.screen.height) < 600
+}
+
 async function enforcePortraitLock() {
-  // Native runtime lock; web is governed by manifest/CSS support and can no-op.
   if (Capacitor.getPlatform() === 'web') {
     return
   }
 
   try {
-    await ScreenOrientation.lock({ orientation: 'portrait' })
+    if (isPhoneSizedScreen()) {
+      await ScreenOrientation.lock({ orientation: 'portrait' })
+    } else {
+      await ScreenOrientation.unlock()
+    }
   } catch (err) {
     console.warn('Screen orientation lock failed:', err)
   }

@@ -302,3 +302,25 @@ $$;
 revoke all on function public.claim_profile(integer, text) from public, anon;
 grant execute on function public.claim_profile(integer, text) to authenticated;
 
+-- Lets a signed-in customer's client subscribe to their own balance/history changing
+-- (via Supabase Realtime `postgres_changes`) so an already-open app updates instantly
+-- when an admin adjusts their gallons elsewhere. Realtime enforces the same RLS
+-- policies as normal queries, so this doesn't expose any row a client couldn't already
+-- select directly.
+alter publication supabase_realtime add table public.profiles, public.gallon_transactions;
+
+-- The app only ever talks to Supabase via the REST/postgrest client and Realtime, never
+-- GraphQL. With pg_graphql installed, Supabase's default grants make every table any role
+-- can SELECT (including profiles/gallon_transactions for `authenticated`) discoverable
+-- through /graphql/v1 introspection, regardless of RLS. Since nothing here uses that
+-- endpoint, drop the extension outright instead of managing per-table GraphQL grants.
+drop extension if exists pg_graphql;
+
+-- rls_auto_enable() is an event-trigger function (see the `ensure_rls` event trigger,
+-- managed outside this file) that auto-enables RLS on newly created tables. It's not meant
+-- to be called directly, but Supabase's default grants left it invocable via
+-- /rest/v1/rpc/rls_auto_enable by anon and authenticated. Revoking EXECUTE closes that RPC
+-- surface; the event trigger keeps firing regardless, since event triggers don't check the
+-- triggering role's EXECUTE privilege.
+revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+

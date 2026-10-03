@@ -13,7 +13,7 @@ export default defineConfig({
       theme_color: '#0f172a',
       background_color: '#0f172a',
       display: 'standalone',
-      orientation: 'portrait',
+      // No orientation lock: a web app manifest can't lock phones only, and tablets should rotate.
       icons: [
         {
           src: 'icon-192.png',

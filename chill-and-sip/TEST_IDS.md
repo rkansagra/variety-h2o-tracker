@@ -23,14 +23,28 @@ The app uses a `vh2o-<screen>-<section>-<element>[-token]` naming convention, an
 - `vh2o-login-username-input`
 - `vh2o-login-password-input`
 - `vh2o-login-submit`
+- `vh2o-login-google-btn` (web only; not rendered in the native apps)
+- `vh2o-login-privacy-link`
 - `vh2o-login-error`
-- `vh2o-login-reset-email-input`
-- `vh2o-login-reset-request-btn`
+- `vh2o-login-forgot-link` (hidden while setting a new password)
 - `vh2o-login-reset-status`
 - `vh2o-login-recovery-title`
 - `vh2o-login-recovery-password-input`
 - `vh2o-login-recovery-confirm-password-input`
 - `vh2o-login-recovery-submit`
+
+## Forgot password (`/forgot-password`)
+
+- `vh2o-forgot-root`
+- `vh2o-forgot-phone`
+- `vh2o-forgot-content`
+- `vh2o-forgot-title`
+- `vh2o-forgot-email-input`
+- `vh2o-forgot-submit`
+- `vh2o-forgot-error`
+- `vh2o-forgot-status`
+- `vh2o-forgot-back-link`
+- `vh2o-forgot-privacy-link`
 
 ## Claim account (public self-serve signup)
 
@@ -45,17 +59,31 @@ The app uses a `vh2o-<screen>-<section>-<element>[-token]` naming convention, an
 - `vh2o-claim-confirm-password-input`
 - `vh2o-claim-submit`
 - `vh2o-claim-error`
+- `vh2o-claim-privacy-link`
 - `vh2o-claim-success`
+- `vh2o-claim-signed-in-as` (only for a signed-in login with no linked profile, e.g. first Google sign-in)
+- `vh2o-claim-switch-account-btn` (same condition)
 
 ## App shell
 
 - `vh2o-app-root`
 - `vh2o-app-phone`
-- `vh2o-app-header`
-- `vh2o-app-header-logo`
+- `vh2o-app-header` (phone and tablet only)
+- `vh2o-app-header-logo` (phone and tablet only)
 - `vh2o-app-content`
 
-## Bottom nav
+## Top nav (desktop only)
+
+- `vh2o-top-nav`
+- `vh2o-top-nav-logo`
+- `vh2o-top-nav-tracker`
+- `vh2o-top-nav-menu`
+- `vh2o-top-nav-locations`
+- `vh2o-top-nav-settings`
+- `vh2o-top-nav-account`
+- `vh2o-top-nav-login-btn` (signed out only)
+
+## Bottom nav (phone and tablet only)
 
 - `vh2o-bottom-nav`
 - `vh2o-bottom-nav-tracker`
@@ -65,13 +93,18 @@ The app uses a `vh2o-<screen>-<section>-<element>[-token]` naming convention, an
 
 ## Tracker (user)
 
+- `vh2o-tracker-home` (wraps profile + history; class `vh2o-home` for customers)
+- `vh2o-tracker-profile`
 - `vh2o-tracker-section`
 - `vh2o-tracker-avatar-ring`
+- `vh2o-tracker-avatar` (customer initials)
+- `vh2o-tracker-tier-badge`
 - `vh2o-tracker-user-name`
 - `vh2o-tracker-member-since`
 - `vh2o-tracker-water-type`
 - `vh2o-tracker-points-pill`
 - `vh2o-tracker-history-title`
+- `vh2o-tracker-history` (customers: wraps the transaction rows / empty message)
 - `vh2o-tracker-history-empty`
 
 Dynamic transaction rows:
@@ -87,7 +120,16 @@ Dynamic transaction rows:
 - `vh2o-admin-manage-users-title`
 - `vh2o-admin-active-summary`
 - `vh2o-admin-user-search-input`
-- `vh2o-admin-user-search-hint`
+- `vh2o-admin-user-search-hint` (shown until 3+ characters are typed)
+- `vh2o-admin-customer-list` (hidden on phone while a customer's details are open)
+- `vh2o-admin-filter-all` / `-active` / `-inactive` / `-nologin`
+- `vh2o-admin-sort-select`
+- `vh2o-admin-customer-count` (only while searching)
+- `vh2o-admin-customer-empty`
+- `vh2o-admin-customer-row-<userId>` (`aria-current="true"` when selected, tablet/desktop)
+- `vh2o-admin-customer-detail`
+- `vh2o-admin-customer-detail-empty` (nothing selected yet)
+- `vh2o-admin-back-btn` (phone only)
 
 Dynamic customer rows:
 
@@ -132,13 +174,20 @@ Dynamic history rows:
 - `vh2o-menu-tagline`
 - `vh2o-menu-welcome`
 - `vh2o-menu-title`
-- `vh2o-menu-categories-grid`
-- `vh2o-menu-back-btn`
+- `vh2o-menu-categories-grid` (phone and tablet only)
+- `vh2o-menu-back-btn` (phone and tablet only)
+- `vh2o-menu-items` (the selected category's items)
+- `vh2o-menu-category-list` (desktop only; the first category is selected by default)
+- `vh2o-menu-category-title` (desktop only)
 
-Dynamic category cards:
+Dynamic category cards (phone and tablet only):
 
 - `vh2o-menu-category-card-<categoryId>`
 - `vh2o-menu-category-name-<categoryId>`
+
+Dynamic category links (desktop only; `aria-current="true"` on the selected one):
+
+- `vh2o-menu-category-link-<categoryId>`
 
 Dynamic item rows:
 
@@ -156,6 +205,7 @@ Consolidated pricing (when 2+ items in a category share the exact same price or 
 
 - `vh2o-locations-section`
 - `vh2o-locations-title`
+- `vh2o-locations-cards` (grid of the cards below)
 - `vh2o-locations-address-card`
 - `vh2o-locations-call-card`
 - `vh2o-locations-hours-card`
@@ -183,6 +233,7 @@ Call sheet:
 - `vh2o-settings-title`
 - `vh2o-settings-login-btn`
 - `vh2o-settings-logout-btn`
+- `vh2o-settings-privacy-link`
 
 Admin registration:
 
@@ -194,6 +245,23 @@ Admin registration:
 - `vh2o-settings-admin-register-submit`
 - `vh2o-settings-admin-register-error`
 - `vh2o-settings-admin-register-success`
+
+Biometric unlock (only rendered when the device reports biometry is available -- native only, never on web/PWA):
+
+- `vh2o-settings-biometric-title`
+- `vh2o-settings-biometric-toggle-btn`
+- `vh2o-settings-biometric-error`
+
+## Biometric lock screen
+
+Rendered instead of the app shell when a signed-in user has biometric lock enabled and the app has just launched or returned to the foreground.
+
+- `vh2o-biometric-lock-root`
+- `vh2o-biometric-lock-phone`
+- `vh2o-biometric-lock-message`
+- `vh2o-biometric-lock-unlock-btn`
+- `vh2o-biometric-lock-error`
+- `vh2o-biometric-lock-logout-btn`
 
 ## Maintenance rules
 

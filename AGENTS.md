@@ -3,12 +3,21 @@
 ## Scope and repo layout
 - Primary product code is in `chill-and-sip/` (React + Vite + Capacitor mobile shells). It is the
   only app in this repo.
-- Treat `chill-and-sip/android/` and `chill-and-sip/ios/` as Capacitor native wrappers around the
-  web app.
+- Planned work, priorities, and settled product decisions live in `ROADMAP.md` -- check it before
+  proposing features, and update it when an item ships.
+- Treat `chill-and-sip/android/` as the Capacitor native wrapper around the web app. There is no
+  native iOS project: iOS ships as an installable PWA (not the App Store), so don't add iOS-only
+  native work. If that ever changes, recreate it with `npx cap add ios`.
 
 ## Big-picture architecture
 - App entry is `chill-and-sip/src/main.jsx`; it mounts `RewardsApp` from `chill-and-sip/src/App.jsx`.
-- `main.jsx` enforces portrait mode via `@capacitor/screen-orientation` and re-locks on app foreground (`CapacitorApp.addListener('appStateChange', ...)`).
+- `main.jsx` locks portrait only on phone-sized native screens (shortest side < 600dp) via
+  `@capacitor/screen-orientation`, unlocks on tablets, and re-applies on app foreground
+  (`CapacitorApp.addListener('appStateChange', ...)`).
+- Layout size classes come from `useSizeClass()` in `App.jsx` (phone: < 600px wide or < 500px
+  tall; tablet: 600-1023px; desktop: >= 1024px), mirrored onto `<html data-size>` for the CSS in
+  `src/index.css`. Desktop swaps the logo banner and bottom tab bar for a top bar. Decide layout by
+  window size, never by user-agent sniffing.
 - Almost all business/UI logic lives in one file: `chill-and-sip/src/App.jsx`.
 - `UserProvider` (same file) owns auth/session state, the customer/profile list, and transaction
   notifications.
@@ -43,16 +52,21 @@
 
 ## Build, run, and quality workflow
 - Work from `chill-and-sip/` for app tasks.
-- Core scripts (`chill-and-sip/package.json`): `npm run dev`, `npm run build`, `npm run lint`, `npm run preview`.
-- PWA config is in `chill-and-sip/vite.config.js` via `vite-plugin-pwa` (standalone + portrait manifest).
-- There is no automated test suite configured; practical validation is lint + manual flows (admin login, claim flow, gallons credit/debit, claim-code generation).
+- Core scripts (`chill-and-sip/package.json`): `npm run dev`, `npm run build`, `npm run lint`, `npm test`, `npm run preview`.
+- PWA config is in `chill-and-sip/vite.config.js` via `vite-plugin-pwa` (standalone manifest, no orientation lock).
+- Tests are Vitest + React Testing Library (`chill-and-sip/src/*.test.jsx`, config in
+  `chill-and-sip/vitest.config.js`, shared mocks in `chill-and-sip/src/test/`). GitHub Actions
+  (`.github/workflows/test.yml`) runs lint, tests, and build on every PR and push to `main`. Still
+  sanity-check manual flows the tests don't cover (admin login, claim flow, gallons credit/debit,
+  claim-code generation, anything native-only).
 - `main` is branch-protected -- changes go through a pull request, not a direct push. Netlify only
   auto-builds Deploy Preview builds for open PRs; production (`varietyh2o.com`) is deployed
   manually/deliberately, never automatically on push or merge (see `netlify.toml`'s `ignore` rule).
 
 ## Native integration and gotchas
-- Capacitor config: `chill-and-sip/capacitor.config.json` (`webDir: dist`, app id `org.example.varietyh2o`).
-- Android wrapper uses `applicationId "org.example.chillandsip"` (`chill-and-sip/android/app/build.gradle`) and portrait lock in manifest.
-- iOS also forces portrait in `chill-and-sip/ios/App/App/Info.plist`.
-- Plugin surface currently includes App, Local Notifications, and Screen Orientation (see `package.json`, Podfile, `capacitor.build.gradle`).
-- Do not hand-edit generated files such as `chill-and-sip/android/app/capacitor.build.gradle` or `chill-and-sip/ios/App/App/public/*`; regenerate through Capacitor build/sync flow.
+- Capacitor config: `chill-and-sip/capacitor.config.json` (`webDir: dist`, app id `com.varietyh2o.app`).
+- Android wrapper uses `applicationId "com.varietyh2o.app"` (`chill-and-sip/android/app/build.gradle`) (no orientation lock in the manifest -- see `main.jsx`).
+  The application ID is permanent once uploaded to Google Play -- never change it.
+- Plugin surface currently includes App, Local Notifications, Screen Orientation, and Biometric Auth
+  (`@aparajita/capacitor-biometric-auth`) (see `package.json`, `capacitor.build.gradle`).
+- Do not hand-edit generated files such as `chill-and-sip/android/app/capacitor.build.gradle` or `chill-and-sip/android/app/src/main/assets/public/*`; regenerate through Capacitor build/sync flow.

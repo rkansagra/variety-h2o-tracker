@@ -1,3 +1,45 @@
+/* ─── Design tokens ────────────────────────────────────────────────────────────
+   The app's palette and spacing as named values (from the ui-ux-pro-max audit). Styles in App.jsx
+   and here reference these instead of raw colors. Deliberate exceptions stay raw hex: menu-category
+   and reward-tier colors (data combined into other values, e.g. `${cat.color}55`), Lucide icon
+   `color` props (SVG attributes), and one-off accent tints used by a single element. */
+:root {
+  --vh2o-bg: #0f172a;
+  --vh2o-bg-raised: #1b2335;
+  --vh2o-surface: rgba(255, 255, 255, 0.05);
+  --vh2o-sheet: #1e293b;
+  --vh2o-border: rgba(255, 255, 255, 0.08);
+  --vh2o-border-accent: rgba(125, 211, 252, 0.25);
+  --vh2o-text: #f0f9ff;
+  --vh2o-text-muted: #94a3b8;
+  --vh2o-text-subtle: #8a99ae;
+  --vh2o-accent: #38bdf8;
+  --vh2o-accent-soft: #7dd3fc;
+  --vh2o-accent-strong: #0ea5e9;
+  --vh2o-success: #34d399;
+  --vh2o-danger: #f87171;
+  --vh2o-surface-subtle: rgba(255, 255, 255, 0.04);
+  --vh2o-border-strong: rgba(255, 255, 255, 0.1);
+  --vh2o-scrim: rgba(0, 0, 0, 0.6);
+  --vh2o-cta: linear-gradient(135deg, #f472b6, #fb923c);
+  --vh2o-page-gradient: linear-gradient(160deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+  --vh2o-header-gradient: linear-gradient(160deg, #164e63 0%, #1e3a5f 60%, #0f172a 100%);
+  --vh2o-avatar-gradient: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  --vh2o-space-1: 4px;
+  --vh2o-space-2: 8px;
+  --vh2o-space-3: 12px;
+  --vh2o-space-4: 16px;
+  --vh2o-space-6: 24px;
+  --vh2o-space-8: 32px;
+  --vh2o-radius-control: 10px;
+  --vh2o-radius-card: 16px;
+  /* Content column widths per size class. */
+  --vh2o-column-tablet: 760px;
+  --vh2o-column-desktop: 1200px;
+  --vh2o-column-settings: 560px;
+  --vh2o-column-admin: 1400px;
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
@@ -19,7 +61,9 @@
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--text);
-  background: var(--bg);
+  /* The app's own dark navy, not the starter's light/dark --bg: this shows during iOS overscroll
+     bounce and behind the notch/home-indicator areas, where white would flash. */
+  background: #0f172a;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -50,16 +94,21 @@
   }
 }
 
+/* Also in App.jsx's css string, but Login and ClaimAccount don't render that -- without this their
+   width: 100% inputs overflow by their own padding. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
   text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -108,4 +157,636 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+/* ─── App frame ─────────────────────────────────────────────────────────────
+   Applied to every screen's outer wrapper (.vh2o-root) and app surface (.vh2o-phone), alongside
+   styles.root/styles.phone in App.jsx. Lives here rather than in App.jsx's css string because
+   Login and ClaimAccount don't render that string.
+
+   Size classes come from useSizeClass() in App.jsx via <html data-size="phone|tablet|desktop">
+   (phone: < 600px wide or < 500px tall; tablet: 600-1023px; desktop: >= 1024px).
+
+   The app fills the window at every size -- no framed "phone" box. The safe-area padding keeps
+   content clear of the notch/Dynamic Island and home indicator (the installed iOS web app draws
+   under a black-translucent status bar; index.html sets viewport-fit=cover); it is zero where a
+   device has no insets. */
+.vh2o-root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: stretch;
+}
+
+.vh2o-phone {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+/* Tablet/desktop: main-app content sits in a centered reading column. */
+html[data-size="tablet"] .vh2o-content {
+  width: 100%;
+  max-width: var(--vh2o-column-tablet);
+  margin-inline: auto;
+}
+
+html[data-size="desktop"] .vh2o-content {
+  width: 100%;
+  max-width: var(--vh2o-column-desktop);
+  margin-inline: auto;
+  padding-top: var(--vh2o-space-6);
+}
+
+/* Tablet/desktop: sign-in style screens (login, forgot password, claim, biometric lock) become a
+   centered card on the page gradient instead of stretching across the window. */
+html[data-size="tablet"] .vh2o-auth,
+html[data-size="desktop"] .vh2o-auth {
+  align-items: center;
+  padding: var(--vh2o-space-6) var(--vh2o-space-4);
+}
+
+html[data-size="tablet"] .vh2o-auth .vh2o-phone,
+html[data-size="desktop"] .vh2o-auth .vh2o-phone {
+  width: min(440px, 100%);
+  min-height: 0;
+  border-radius: 20px;
+  border: 1px solid var(--vh2o-border);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+
+/* Logo banner (phone and tablet): capped so it doesn't balloon across a tablet's width. */
+.vh2o-banner-logo {
+  display: block;
+  max-width: 360px;
+  margin-inline: auto;
+}
+
+/* Desktop top bar: logo, the four tabs, and the signed-in account (replaces the logo banner and
+   the bottom tab bar). */
+.vh2o-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: var(--vh2o-space-6);
+  padding: 0 var(--vh2o-space-8);
+  min-height: 68px;
+  background: linear-gradient(90deg, #13233b, var(--vh2o-bg) 70%);
+  border-bottom: 1px solid var(--vh2o-border);
+  text-align: left;
+}
+
+.vh2o-topbar-logo {
+  height: 44px;
+  width: auto;
+}
+
+.vh2o-topbar-tabs {
+  display: flex;
+  gap: var(--vh2o-space-1);
+}
+
+.vh2o-topbar-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vh2o-space-2);
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--vh2o-radius-control);
+  background: none;
+  color: var(--vh2o-text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vh2o-topbar-tab:hover {
+  color: var(--vh2o-text);
+}
+
+.vh2o-topbar-tab[aria-current="page"] {
+  color: var(--vh2o-text);
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: inset 0 -2px 0 var(--vh2o-accent);
+}
+
+.vh2o-topbar-account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--vh2o-space-3);
+  color: var(--vh2o-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.vh2o-topbar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--vh2o-avatar-gradient);
+  color: var(--vh2o-bg);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.vh2o-topbar-login {
+  border: 0;
+  border-radius: var(--vh2o-radius-control);
+  background: var(--vh2o-cta);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+
+/* ─── Customer screens ─────────────────────────────────────────────────────────
+   Section headings and content blocks are centered at every size; text inside rows and cards stays
+   left-aligned for scanning. */
+
+/* Home: profile card + transaction history. */
+.vh2o-home-section,
+.vh2o-home-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vh2o-home-section {
+  padding: 16px 16px 0;
+}
+
+html[data-size="tablet"] .vh2o-home-profile,
+html[data-size="desktop"] .vh2o-home-profile {
+  background: var(--vh2o-surface);
+  border: 1px solid var(--vh2o-border);
+  border-radius: var(--vh2o-radius-card);
+  padding: var(--vh2o-space-6) var(--vh2o-space-4);
+}
+
+/* Tablet (portrait and landscape): the profile card is centered on its own row, history below. */
+html[data-size="tablet"] .vh2o-home-profile {
+  width: calc(100% - 2 * var(--vh2o-space-4));
+  max-width: 440px;
+  margin: var(--vh2o-space-4) auto 0;
+}
+
+/* Desktop: profile card left, history right. The heading sits over the history column only, so
+   the top of the card lines up with the first transaction. */
+html[data-size="desktop"] .vh2o-home {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-areas:
+    ". title"
+    "card list";
+  gap: var(--vh2o-space-3) var(--vh2o-space-6);
+  align-items: start;
+  padding-inline: var(--vh2o-space-4);
+}
+
+html[data-size="desktop"] .vh2o-home-profile {
+  grid-area: card;
+}
+
+html[data-size="desktop"] .vh2o-home-section {
+  display: contents;
+}
+
+html[data-size="desktop"] #vh2o-tracker-history-title {
+  grid-area: title;
+}
+
+html[data-size="desktop"] .vh2o-home-history {
+  grid-area: list;
+}
+
+/* Menu: category grid (phone/tablet) or category list beside the items (desktop). */
+.vh2o-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+html[data-size="tablet"] .vh2o-menu-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--vh2o-space-3);
+}
+
+@media (orientation: landscape) {
+  html[data-size="tablet"] .vh2o-menu-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.vh2o-menu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+html[data-size="tablet"] .vh2o-menu-items,
+html[data-size="desktop"] .vh2o-menu-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--vh2o-space-3);
+  align-items: start;
+}
+
+/* A shared-price group (pricing bar + flavor chips) spans both columns. */
+.vh2o-menu-items .vh2o-menu-group {
+  grid-column: 1 / -1;
+}
+
+.vh2o-menu-desk {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  grid-template-areas:
+    ". title"
+    "nav items";
+  gap: var(--vh2o-space-3) var(--vh2o-space-6);
+  align-items: start;
+  margin-top: var(--vh2o-space-2);
+}
+
+.vh2o-menu-desk-title {
+  grid-area: title;
+}
+
+.vh2o-menu-desk .vh2o-menu-items {
+  grid-area: items;
+}
+
+.vh2o-menu-cat-list {
+  grid-area: nav;
+  display: grid;
+  gap: var(--vh2o-space-1);
+}
+
+.vh2o-menu-cat-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: var(--vh2o-space-2) var(--vh2o-space-3);
+  border: 0;
+  border-radius: var(--vh2o-radius-control);
+  background: none;
+  color: var(--vh2o-text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vh2o-menu-cat-link:hover {
+  color: var(--vh2o-text);
+}
+
+.vh2o-menu-cat-link[aria-current="true"] {
+  background: var(--vh2o-surface);
+  color: var(--vh2o-text);
+  box-shadow: inset 3px 0 0 var(--vh2o-accent);
+}
+
+.vh2o-menu-cat-emoji {
+  font-size: 20px;
+}
+
+.vh2o-menu-cat-count {
+  margin-left: auto;
+  color: var(--vh2o-text-subtle);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Location: stacked on phone; 2 columns on tablet, 3 on desktop, address card spanning two. */
+.vh2o-location-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+html[data-size="tablet"] .vh2o-location-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--vh2o-space-3);
+}
+
+html[data-size="desktop"] .vh2o-location-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--vh2o-space-4);
+}
+
+html[data-size="tablet"] #vh2o-locations-address-card,
+html[data-size="desktop"] #vh2o-locations-address-card {
+  grid-column: span 2;
+}
+
+/* Settings: a centered readable column instead of stretching. */
+html[data-size="tablet"] .vh2o-settings,
+html[data-size="desktop"] .vh2o-settings {
+  width: 100%;
+  max-width: var(--vh2o-column-settings);
+  margin-inline: auto;
+}
+
+/* ─── Admin customers (list + detail) ─────────────────────────────────────────
+   Phone: list, then a customer's details as a separate view (App.jsx swaps them).
+   Tablet portrait: list above details. Tablet landscape + desktop: side by side, with the admin
+   view widened to --vh2o-column-admin. */
+html[data-size="desktop"] .vh2o-content--wide {
+  max-width: var(--vh2o-column-admin);
+  padding-inline: var(--vh2o-space-6);
+}
+
+.vh2o-admin-panels {
+  display: grid;
+  gap: var(--vh2o-space-4);
+  margin-top: var(--vh2o-space-3);
+  text-align: left;
+}
+
+html[data-size="desktop"] .vh2o-admin-panels {
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--vh2o-space-6);
+}
+
+@media (orientation: landscape) {
+  html[data-size="tablet"] .vh2o-content--wide {
+    max-width: none;
+    padding-inline: var(--vh2o-space-4);
+  }
+
+  html[data-size="tablet"] .vh2o-admin-panels {
+    grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.vh2o-admin-list {
+  display: grid;
+  gap: var(--vh2o-space-3);
+  align-content: start;
+}
+
+/* Side by side, the list scrolls on its own so the details stay in view. */
+html[data-size="desktop"] .vh2o-admin-rows {
+  max-height: calc(100dvh - 330px);
+  overflow-y: auto;
+}
+
+@media (orientation: landscape) {
+  html[data-size="tablet"] .vh2o-admin-rows {
+    max-height: calc(100dvh - 400px);
+    overflow-y: auto;
+  }
+}
+
+.vh2o-admin-muted {
+  color: var(--vh2o-text-subtle);
+  font-size: 12px;
+}
+
+.vh2o-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--vh2o-space-2);
+}
+
+.vh2o-chip {
+  border: 1px solid var(--vh2o-border);
+  border-radius: 999px;
+  background: none;
+  color: var(--vh2o-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.vh2o-chip[aria-pressed="true"] {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: var(--vh2o-text);
+}
+
+.vh2o-admin-sort {
+  display: flex;
+  align-items: center;
+  gap: var(--vh2o-space-2);
+  color: var(--vh2o-text-subtle);
+  font-size: 12px;
+}
+
+.vh2o-admin-sort select {
+  background: var(--vh2o-bg-raised);
+  color: var(--vh2o-text);
+  border: 1px solid var(--vh2o-border);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.vh2o-admin-rows {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.vh2o-admin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--vh2o-space-3);
+  background: var(--vh2o-surface);
+  border: 1px solid var(--vh2o-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.vh2o-admin-row:hover {
+  border-color: var(--vh2o-border-accent);
+}
+
+.vh2o-admin-row[aria-current="true"] {
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: inset 3px 0 0 var(--vh2o-accent);
+}
+
+.vh2o-admin-row-name,
+.vh2o-admin-row-email {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vh2o-admin-row-name {
+  color: var(--vh2o-text);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.vh2o-admin-row-gallons {
+  color: var(--vh2o-accent-soft);
+  font-weight: 900;
+  font-size: 15px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.vh2o-admin-row-email,
+.vh2o-admin-row-meta {
+  color: var(--vh2o-text-subtle);
+  font-size: 12px;
+}
+
+.vh2o-admin-row-meta {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.vh2o-status-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.vh2o-status-pill.is-active {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--vh2o-success);
+}
+
+.vh2o-status-pill.is-inactive {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--vh2o-text-muted);
+}
+
+.vh2o-status-pill.is-nologin {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+
+.vh2o-admin-detail-panel {
+  display: grid;
+  gap: var(--vh2o-space-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.vh2o-admin-placeholder {
+  color: var(--vh2o-text-subtle);
+  text-align: center;
+  padding: var(--vh2o-space-8) var(--vh2o-space-4);
+  border: 1px dashed var(--vh2o-border);
+  border-radius: var(--vh2o-radius-card);
+}
+
+.vh2o-admin-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--vh2o-space-1);
+  justify-self: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--vh2o-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vh2o-admin-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--vh2o-space-3);
+}
+
+.vh2o-admin-detail-name {
+  color: var(--vh2o-text);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.vh2o-admin-detail-balance {
+  display: grid;
+  justify-items: end;
+}
+
+.vh2o-admin-detail-gallons {
+  color: var(--vh2o-accent-soft);
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.vh2o-admin-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--vh2o-space-2) var(--vh2o-space-3);
+}
+
+.vh2o-admin-detail-facts button {
+  margin-left: auto;
+}
+
+/* ─── Accessibility ─────────────────────────────────────────────────────────── */
+
+/* Visible focus for keyboard users on every control (buttons, links, inputs, and role="button"
+   cards). :focus-visible keeps it off mouse/touch taps on buttons; text inputs always show it. */
+:focus-visible {
+  outline: 2px solid var(--vh2o-accent);
+  outline-offset: 2px;
+}
+
+/* Dialogs take focus themselves when they open (see useDialog in App.jsx) -- they're containers,
+   not controls, so no ring around the whole sheet. Controls inside still show theirs. */
+[role="dialog"]:focus {
+  outline: none;
+}
+
+/* Minimum 44x44px tap area on every control (Apple HIG / WCAG 2.5.5 target size). Several admin
+   controls and small action buttons were ~30px tall. Inline styles set padding but never height,
+   so this floor applies everywhere without per-control overrides. */
+button,
+input,
+select,
+[role="button"] {
+  min-height: 44px;
+}
+
+button {
+  min-width: 44px;
+}
+
+/* Respect the OS "reduce motion" setting: confetti, pop-in stamps, sliding toasts, and hover
+   transitions finish instantly instead of animating. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

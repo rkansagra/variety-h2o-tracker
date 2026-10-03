@@ -11,7 +11,7 @@ The active product code lives under `chill-and-sip/`.
 - Menu and location information
 - Claim-code flow for imported or legacy customers to create their own login
 - Supabase-backed transaction history and auth
-- Native mobile wrappers for Android and iOS via Capacitor
+- Native Android wrapper via Capacitor; iOS users install the PWA from Safari
 
 ## Directory breakdown
 
@@ -29,7 +29,7 @@ This is the real application codebase.
 - `src/lib/supabaseClient.js` — Supabase client setup and auth configuration
 - `src/assets/` — static images and branding assets
 - `src/index.css` — base styling
-- `android/` and `ios/` — native Capacitor wrapper projects
+- `android/` — native Capacitor wrapper project (there is no `ios/`; iOS ships as a PWA)
 - `supabase/schema.sql` — database schema and admin-only transaction functions
 - `public/` — public static assets for the web build
 - `dist/` — production build output
@@ -84,6 +84,9 @@ npm run dev
 npm run build
 npm run lint
 npm run preview
+npm run test           # unit/component tests (Vitest + React Testing Library), no backend required
+npm run test:watch
+npm run test:coverage
 ```
 
 ## Product conventions
@@ -91,8 +94,39 @@ npm run preview
 - App entry is `src/main.jsx`
 - Business logic is concentrated in `src/App.jsx`
 - Stable DOM IDs are documented in `TEST_IDS.md`
-- Native build logic belongs in `android/` and `ios/` and should not be hand-edited unless using Capacitor sync/build steps
+- Native build logic belongs in `android/` and should not be hand-edited unless using Capacitor sync/build steps
 - The app is designed around React state, with Supabase as the persistent backend
+
+## Automated tests
+
+`src/App.jsx` exports its pure helper functions (`mapProfileToUser`, `isActiveCustomer`,
+`slugify`, `getTier`, etc.), `UserContext`/`UserProvider`/`useUser`, and the `Login`/`ClaimAccount`
+components specifically so they're testable in isolation -- Vite's Fast Refresh lint rule is
+disabled for this one file in `eslint.config.js` to allow it (see the comment there).
+
+- `src/App.pure.test.jsx` — pure logic: active/inactive window math, notification capping,
+  profile/transaction mapping, reward tiers.
+- `src/Login.test.jsx` — component-level: renders `<Login />` with a hand-fed fake
+  `UserContext` value (not the real `UserProvider`), so it tests Login's own rendering/event
+  logic without touching Supabase at all.
+- `src/UserProvider.test.jsx` — integration-level: renders the real `UserProvider` against a
+  mocked Supabase client (`src/test/supabaseMock.js`) to exercise `login()`'s actual
+  profile-linking logic, including the `authLinkError` path an OAuth sign-in with no matching
+  `profiles` row takes.
+- `src/BiometricAuth.test.jsx` — integration-level: the biometric lock preference/gate logic
+  (`enableBiometricLock`/`unlockWithBiometrics`/`disableBiometricLock`, and locking on sign-in
+  when the preference was already on) against mocked `@capacitor/core` and
+  `@aparajita/capacitor-biometric-auth`.
+
+None of these hit a real Supabase project -- `src/test/supabaseMock.js` is a hand-built fake
+covering just the `.from()/.rpc()/.auth.*/.channel()` chain shapes App.jsx actually calls; extend
+it if a new test needs a chain shape it doesn't support yet. `src/test/setup.js` also globally
+mocks `@capacitor/core`, `@capacitor/app`, and `@aparajita/capacitor-biometric-auth` to
+"web platform, no biometry" by default for every test file (partly because these are native-only
+plugins with nothing meaningful to do in jsdom, partly because the biometric-auth package's ESM
+build doesn't resolve under Vitest at all -- see the comment there). There is currently no E2E
+suite against a running app/browser -- `TEST_IDS.md`'s selectors exist for that if it's added
+later.
 
 ## Documentation map
 
@@ -106,3 +140,4 @@ npm run preview
 - Need to set up local environment? Read `SUPABASE_SETUP.md`
 - Need to target UI selectors in automation? Read `TEST_IDS.md`
 - Need to build or lint? Use the package scripts above
+- Need to run or extend tests? Read "Automated tests" above, then the test files themselves

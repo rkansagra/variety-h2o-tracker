@@ -101,3 +101,84 @@ without staff already having their email:
 - Active/Inactive is never stored — the app computes it live from `gallons > 0 OR last_transaction_at
   within the last 31 days`. `last_transaction_at` is set only by `admin_adjust_gallons(...)`, never by
   editing water type or generating a claim code, so it always reflects real purchase activity.
+
+## 8) Auth history and future plans
+
+Customer/admin auth briefly switched to phone number + password (to avoid email friction and set
+up future SMS features), then was reverted back to email + password. That attempt is why you may
+see references to it in old commits/PRs -- the current, standing plan going forward is:
+
+- **Email + password stays the primary login method.** No phone number field, no SMS provider.
+- **Notifications move in-app instead of SMS.** Any future rewards/spend-threshold reminders (e.g.
+  "you're close to your next reward") should be built as in-app notifications the customer sees
+  when they open the app -- not text messages. This avoids the SMS provider cost/complexity
+  entirely (Twilio A2P 10DLC registration, per-message fees, etc. -- see prior session's cost
+  research if you want the numbers) while still reaching the customer.
+- **OAuth/social login is additive to email; Google is implemented app-side.** `loginWithGoogle()`
+  in `App.jsx` calls `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo:
+  authRedirectUrl() } })`, and the Login page has a "Continue with Google" button that triggers it.
+  The button is **web/PWA only** -- it's hidden in the Capacitor native app, because Google rejects
+  OAuth inside embedded webviews (`Error 403: disallowed_useragent`).
+  - `authRedirectUrl()` is also used for password-reset and sign-up confirmation emails. It returns
+    `<current origin>/login` on the web and `https://varietyh2o.com/login` in the native app, whose
+    own origin (`https://localhost`) no browser can reach. Supabase's Redirect URLs allow list has
+    `https://varietyh2o.com/login`, `https://deploy-preview-*--papaya-ganache-217e68.netlify.app/login`
+    and `http://localhost:5173/login`; the Site URL is `https://varietyh2o.com`.
+  The redirect-back is handled automatically -- `supabaseClient.js` already has
+  `detectSessionInUrl: true`, so the returning session flows through the existing
+  `onAuthStateChange` → `refreshFromSupabase()` path the same as any other sign-in.
+  - **This app-code half is only useful once the Supabase/Google Cloud half is configured**,
+    which is dashboard/console work this file can't do for you:
+    1. Google Cloud Console: create an OAuth client (Web application type). Authorized redirect
+       URI is your Supabase project's callback, e.g. `https://<project-ref>.supabase.co/auth/v1/callback`.
+    2. Supabase Dashboard → Authentication → Providers → Google: paste that Client ID + Secret,
+       enable the provider.
+    3. Decide whether to enable Dashboard → Authentication → Settings → "Automatic linking" for
+       accounts sharing a verified email. Without it, a customer who already has an email/password
+       login gets a *separate* `auth.users` row when they use Google with the same email, which
+       won't match their existing `profiles.auth_user_id` -- `refreshFromSupabase()` then treats
+       it as an unlinked login (see step 4) and sends them to `/claim`. With it enabled, Supabase resolves both sign-in methods to the same
+       `auth.users` row, so the existing profile match just works.
+    4. New customers signing in with Google for the first time still need a `profiles` row to land
+       on (same as email/password) -- either an admin-created row with a matching email (linked
+       automatically on sign-in), or a claim code. For the latter, `refreshFromSupabase()` keeps
+       the unlinked session instead of signing it out and sets `unlinkedAuthEmail`;
+       `UnlinkedSessionRedirect` sends them to `/claim`, which shows who is signed in and asks only
+       for the customer ID + claim code (plus "Use a different account"). `claim_profile()` needs
+       no change -- it works for any signed-in user and takes the email from `auth.users`.
+  - **Apple Sign-In was deliberately not built.** It'd otherwise follow the same app-side pattern
+    (`provider: 'apple'`) plus its own Apple Developer Program setup (a **Services ID** --
+    reverse-domain, not the same as Google's Client ID -- plus a `.p8` signing key rotated every 6
+    months). The only reason to add it would be Apple App Store Review Guideline 4.8 (offering one
+    third-party login obligates offering Apple's too) -- but this project distributes to iOS as an
+    installable PWA (Add to Home Screen in Safari) instead of through the App Store, specifically
+    to avoid the $99/year Apple Developer Program membership. No App Store submission means
+    Guideline 4.8 doesn't apply. Revisit only if App Store distribution becomes a goal again.
+  - Facebook/etc. would follow the same app-side pattern (`provider: 'facebook'`) plus that
+    provider's own console + Dashboard config.
+- **Biometric login (Face ID / Touch ID / Android biometric) is implemented, native only.** A
+  device-level convenience layer on top of the existing Supabase session -- not a separate auth
+  method, and it never replaces email/password or OAuth. The underlying account is unchanged;
+  biometrics just gate whether the already-signed-in session is shown after the app launches or
+  returns to the foreground.
+  - Uses [`@aparajita/capacitor-biometric-auth`](https://github.com/aparajita/capacitor-biometric-auth)
+    (Capacitor 7-compatible), **not** `capacitor-native-biometric` as originally sketched here --
+    that package still pins `@capacitor/core@^3.4.3` (unmaintained for over a year), which would
+    have installed a second, incompatible copy of Capacitor's core alongside this project's v7.
+  - `UserProvider` (`App.jsx`) owns all of it: `biometricAvailable`/`biometryType` (from
+    `BiometricAuth.checkBiometry()`, native platforms only -- always false/none on web, so this
+    never shows up in the PWA), `biometricLockEnabled` (this user's own opt-in, persisted in
+    `localStorage` keyed by `auth_user_id` since more than one account could sign into the same
+    device), and `isBiometricLocked` (the moment-to-moment "show the lock screen" flag, set
+    whenever a signed-in user with the preference on cold-starts the app or backgrounds/
+    foregrounds it via `@capacitor/app`'s `appStateChange`).
+  - `enableBiometricLock()` requires one successful `authenticate()` before persisting the
+    preference, so nobody can lock themselves out by enabling it somewhere biometrics don't
+    actually work for them. `unlockWithBiometrics()` (used by `BiometricLockScreen`, which
+    auto-prompts on mount) and `disableBiometricLock()` round out the pair.
+  - Native permissions: `USE_BIOMETRIC`/`USE_FINGERPRINT` in
+    `android/app/src/main/AndroidManifest.xml`.
+  - `npx cap sync android` has been run and Android is fully wired (Gradle plugin registration
+    confirmed). There is no native iOS project (iOS ships as a PWA); if one is ever added with
+    `npx cap add ios`, it will also need `NSFaceIDUsageDescription` in `ios/App/App/Info.plist`
+    and a `pod install` on a Mac.

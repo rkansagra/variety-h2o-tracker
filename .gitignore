@@ -1,8 +1,15 @@
-### IntelliJ IDEA ###
+### IntelliJ IDEA (per-user workspace config) ###
 .idea/
+*.iml
+
+### Kotlin compiler cache (Android Gradle builds) ###
+.kotlin
 
 ### VS Code ###
 .vscode/
+
+### Gradle build output ###
+build/
 
 ### Mac OS ###
 .DS_Store
@@ -13,3 +20,7 @@ MLWX*_catalog-*.csv
 
 ### Netlify CLI local state ###
 .netlify/
+
+### OAuth client secrets (e.g. Google Cloud Console's downloaded client_secret_*.json) ###
+### These belong in the Supabase Dashboard's provider config, never in git. ###
+client_secret_*.json

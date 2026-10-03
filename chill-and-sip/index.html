@@ -3,9 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: draw edge-to-edge and report safe-area insets (see .vh2o-phone in
+         src/index.css), instead of the browser letterboxing around the notch. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Variety H2O + Ice Cream — diligently purified for an impeccable taste. Track your prepaid gallons, browse the menu, and find us in Tucson, AZ." />
     <title>Variety H2O + Ice Cream</title>
+    <!-- Nunito for every screen (Login/ClaimAccount/ForgotPassword don't render App.jsx's css string). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" />
+    <!-- iOS Safari ignores manifest.json icons/display mode for "Add to Home Screen" -- without
+         these it falls back to a page screenshot as the icon and opens inside Safari chrome
+         instead of standalone full-screen. -->
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Variety H2O" />
   </head>
   <body>
     <div id="root"></div>
