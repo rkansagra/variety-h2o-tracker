@@ -284,6 +284,17 @@ Play, WordPress.com) is noted where it happened.
 - **Production caught up** (2026-10-13): after a pause for Netlify build credits (out 2026-10-03,
   renewed 2026-10-13), varietyh2o.com was deployed from `main` at `6edb25c`, shipping PRs #8 and
   #11-#24.
+- **Account deletion page** (PR #26, deployed 2026-10-15): `/delete-account/` is the Play Data
+  safety "Delete account URL". Deletion within 30 days; transaction records kept 3 years, unlinked
+  from the customer. Deleting a profile row cascades to its transactions, so honor requests by
+  clearing the profile's name/email and auth user rather than deleting the row.
+- **Claim flow fix** (PR #27, deployed 2026-10-15): with email confirmation on, `/claim` failed
+  with "permission denied for function claim_profile"; it now asks the customer to open the
+  confirmation link first.
+- **Brand icons**: the Vite/Capacitor placeholder icons and splash were replaced with the
+  "H2O + cone" mark from the logo, on white. Sources are in `chill-and-sip/assets/`; the Android
+  launcher icons and splash are generated from them with
+  `npx @capacitor/assets generate --android` (never hand-edited).
 
 ## Reference: tablet and desktop layout
 Built in PRs #18-#20. The decisions below still apply to any new or reworked screen.

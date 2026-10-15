@@ -13,7 +13,10 @@ android {
         applicationId "com.varietyh2o.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // versionCode is internal to Play: bump it for every upload, since each one is permanently
+        // used up, even by drafts and testing tracks (1 = the 2026-09-26 upload, 2 = an unreleased
+        // 2026-10-15 upload). versionName is what users see; bump it only for public updates.
+        versionCode 3
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
