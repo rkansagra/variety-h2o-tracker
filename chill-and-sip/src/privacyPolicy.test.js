@@ -28,4 +28,30 @@ describe("public/privacy/index.html", () => {
       expect(html.toLowerCase()).toContain(term.toLowerCase());
     }
   });
+
+  it("links to the account deletion page", () => {
+    expect(html).toContain('href="/delete-account/"');
+  });
+});
+
+// public/delete-account/index.html is the "Delete account URL" in the Play Console Data safety
+// form. Google requires it to name the app, show the deletion steps, and say what is kept and
+// for how long.
+const deleteHtml = readFileSync(resolve(process.cwd(), "public/delete-account/index.html"), "utf8");
+
+describe("public/delete-account/index.html", () => {
+  it("has no unfilled placeholders", () => {
+    expect(deleteHtml).not.toMatch(/_HERE|TODO|PLACEHOLDER|\[[A-Z ]+\]/);
+  });
+
+  it("is self-contained: no external scripts, stylesheets, or trackers", () => {
+    expect(deleteHtml).not.toMatch(/<script/i);
+    expect(deleteHtml).not.toMatch(/<link[^>]+rel=["']stylesheet/i);
+  });
+
+  it("names the app, gives a request email, and states retention", () => {
+    expect(deleteHtml).toContain("Variety H2O + Ice Cream");
+    expect(deleteHtml).toMatch(/mailto:[^"@\s]+@[^"@\s]+\.[a-z]{2,}/i);
+    expect(deleteHtml).toMatch(/3 years/);
+  });
 });
