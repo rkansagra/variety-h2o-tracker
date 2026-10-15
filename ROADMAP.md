@@ -14,18 +14,60 @@ Twilio A2P 10DLC registration and per-message cost) and **no Firebase/FCM push**
 Only if wanted. Would follow the Google pattern (`signInWithOAuth({ provider: 'facebook' })`, web
 only) plus a Meta for Developers app and Supabase provider config.
 
+### 3. "Ask the ledger" assistant (admin only)
+Owners type plain-language questions about customers, balances, and visits (e.g. "Who hasn't come
+in for 60 days?", "How much prepaid balance is outstanding?", "What were last week's busiest
+days?") and get answers grounded in the live data. Not started -- planned only.
+
+**Architecture constraints:**
+- Runs in a Supabase Edge Function. The Anthropic API key lives only in Edge Function secrets,
+  never in the client bundle.
+- Claude uses tool calling against a small, fixed set of **read-only, parameterized** Postgres
+  functions. The model never generates or runs raw SQL.
+- No tool may call or reach `admin_adjust_gallons()` or any other write path. Read-only functions
+  run with the least privilege needed (consider a dedicated read-only role and/or
+  `SECURITY INVOKER`) -- verify this explicitly, not just by convention.
+- Admin only: gated behind existing auth + RLS, not visible or callable by customer accounts. The
+  Edge Function checks the caller's admin status server-side (`is_admin()`).
+- Every answer shows which tool(s) were called and with what parameters, so owners can see where
+  the numbers came from.
+
+**Subtasks:**
+1. Define the initial read-only tool set as Postgres functions, with tests. Starting candidates:
+   `customers_inactive_since(days)`, `outstanding_balance_total()`, `visits_by_day(start, end)`,
+   `top_customers_by_visits(range)`, `customer_lookup(name_or_phone)`.
+2. Edge Function: auth/admin check, Claude tool-use loop, input validation on tool arguments, a
+   max-iterations cap, a timeout, and error handling.
+3. Admin UI: a simple ask box and answer view with a "tools used" disclosure, working on phone,
+   tablet, and desktop layouts (new DOM IDs go in `TEST_IDS.md`).
+4. Eval suite: 20-30 realistic owner questions with known correct answers against a seeded test
+   dataset, run in GitHub Actions alongside the Vitest suite. Include adversarial cases that must
+   be refused or handled safely: requests to change a balance, oddly framed requests for another
+   customer's data, and prompt injection via customer name fields.
+5. Logging: per-request token usage, latency, tools called, and success/failure -- no customer PII
+   in logs beyond what's strictly necessary.
+6. Unit/integration tests for the Edge Function and the tool functions.
+
+**Open questions to settle before building** (found against the current schema):
+- There's no visits table -- "visits" would have to be derived from `gallon_transactions` rows
+  (e.g. one visit per customer per day). Decide the definition before writing `visits_by_day` /
+  `top_customers_by_visits`.
+- `profiles` has no phone column, so `customer_lookup(name_or_phone)` needs a different key (name,
+  email, legacy ID) or a schema change.
+
+**Before implementing:** verify current Anthropic SDK / model names and Supabase Edge Function
+conventions against the docs.
+
+**Out of scope for now:** customer-facing chat, any write actions, and auto-sending messages.
+
+**Possible follow-on (separate item):** draft win-back messages for lapsed customers for owners to
+review and send manually -- never auto-sent.
+
 ## Open operational tasks
-- **Production deploy:** PRs #8 and #11-#23 (Google button + auth redirects, edge-to-edge phones,
-  forgot-password page, accessibility/readability/icons/labels, claim codes for Google users,
-  tablet/desktop layouts, menu category image icons) are merged but not live -- production deploys are manual (see
-  `netlify.toml`). Also needs an Android rebuild for the native app changes.
-- **Test Google sign-in end to end** on varietyh2o.com once deployed: a Google account matching an
-  existing customer's email should land in their tracker.
-- **Google Play release:** build a fresh signed `.aab` from `main` (after the deploy above) and
-  publish it to the production track in the Play Console.
-- **Back up the release keystore** (`android/app/release-key.jks` + `android/keystore.properties`,
-  local-only and git-ignored) somewhere durable off this machine -- it's the only key that can ever
-  sign updates to `com.varietyh2o.app`.
+- **Test Google sign-in end to end** on varietyh2o.com (now live there): a Google account matching
+  an existing customer's email should land in their tracker.
+- **Google Play release:** build a fresh signed `.aab` from `main` (picks up the native-side
+  changes from PRs #8-#23) and publish it to the production track in the Play Console.
 
 ## Decided against
 - **Apple Sign-In:** only required by App Store Review Guideline 4.8, and iOS ships as an
@@ -230,13 +272,18 @@ Play, WordPress.com) is noted where it happened.
     - settings in a centered 560px column,
     - desktop content 1200px wide.
 
-### Phase 5 -- Menu artwork (2026-10-01 to 10-03)
+### Phase 5 -- Menu artwork and production catch-up (2026-10-01 to 10-13)
 - **Image icons for menu categories** (PR #23): a category can set an optional `iconSrc` (an
   imported image), shown by `CategoryIcon` in `App.jsx` and sized in `em` so it matches the emoji at
   every spot (category grid, desktop category list, section titles, item rows); the `icon` emoji
   stays as the fallback. Bottles & Jugs is the first, with a 128x128 PNG (`src/assets/bottles.png`,
   6 KB; the source was a 95 KB 512x512 WebP saved as `.png`). The other categories keep their
   emoji.
+- **Release keystore backed up** (2026-10-03): `release-key.jks` + `keystore.properties` copied to
+  the company Google Drive.
+- **Production caught up** (2026-10-13): after a pause for Netlify build credits (out 2026-10-03,
+  renewed 2026-10-13), varietyh2o.com was deployed from `main` at `6edb25c`, shipping PRs #8 and
+  #11-#24.
 
 ## Reference: tablet and desktop layout
 Built in PRs #18-#20. The decisions below still apply to any new or reworked screen.
