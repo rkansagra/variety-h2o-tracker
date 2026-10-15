@@ -101,6 +101,43 @@ describe("UserProvider / login()", () => {
   });
 });
 
+describe("UserProvider / claimProfile()", () => {
+  it("asks the user to confirm their email instead of claiming signed out when signUp returns no session", async () => {
+    auth.signUpResult = { data: { user: { id: "new-auth" }, session: null }, error: null };
+    state.setRows("profiles", []);
+    state.setRows("gallon_transactions", []);
+
+    const { getCtx } = renderProvider();
+    await waitFor(() => getCtx());
+
+    let result;
+    await act(async () => {
+      result = await getCtx().claimProfile("2", "abcd1234", "New@Example.com", "secret1", "secret1");
+    });
+
+    expect(result).toMatch(/confirmation link to new@example\.com/);
+    expect(sharedMock.client.rpc).not.toHaveBeenCalledWith("claim_profile", expect.anything());
+  });
+
+  it("claims right away when signUp returns a session", async () => {
+    auth.signUpResult = { data: { user: { id: "new-auth" }, session: { user: { id: "new-auth" } } }, error: null };
+    state.rpcResults.claim_profile = { data: {}, error: null };
+    state.setRows("profiles", []);
+    state.setRows("gallon_transactions", []);
+
+    const { getCtx } = renderProvider();
+    await waitFor(() => getCtx());
+
+    let result;
+    await act(async () => {
+      result = await getCtx().claimProfile("2", "abcd1234", "new@example.com", "secret1", "secret1");
+    });
+
+    expect(result).toBe(true);
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("claim_profile", { p_legacy_id: 2, p_claim_code: "ABCD1234" });
+  });
+});
+
 describe("UserProvider / OAuth session with no linked profile (unlinkedAuthEmail)", () => {
   it("keeps the session and exposes unlinkedAuthEmail, so the user can redeem a claim code", async () => {
     // No profiles row anywhere matches this auth user or its email -- as if someone completed

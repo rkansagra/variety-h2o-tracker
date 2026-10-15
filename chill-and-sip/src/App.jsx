@@ -840,7 +840,7 @@ export function UserProvider({ children }) {
         return "Password must be at least 6 characters";
       }
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
         options: {
@@ -850,6 +850,13 @@ export function UserProvider({ children }) {
 
       if (signUpError) {
         return signUpError.message;
+      }
+
+      // With email confirmation on, signUp() returns no session, so claim_profile() would run
+      // signed out and fail with "permission denied". The confirmation link signs them in and
+      // UnlinkedSessionRedirect brings them back here, where the existing-session path claims.
+      if (!signUpData?.session) {
+        return `Almost done: we sent a confirmation link to ${normalizedEmail}. Open it on this device, then enter your customer ID and claim code again.`;
       }
     }
 

@@ -118,6 +118,7 @@ export function resetSupabaseMock() {
   sharedMock.state.responses = {};
   sharedMock.state.singleResponses = {};
   sharedMock.state.calls = [];
+  sharedMock.state.rpcResults = {};
   sharedMock.state.session = null;
   sharedMock.state.user = null;
   sharedMock.state.authStateCallback = null;
