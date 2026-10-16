@@ -1,4 +1,7 @@
-export const ACTIVE_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+// Also the "Ask the ledger" assistant's default for "inactive" (INACTIVE_DAYS in
+// supabase/functions/admin-assistant/assistant.ts); keep the two in step.
+export const ACTIVE_WINDOW_DAYS = 60;
+export const ACTIVE_WINDOW_MS = ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 export function mapProfileToUser(profile) {
   return {
@@ -18,12 +21,10 @@ export function mapProfileToUser(profile) {
   };
 }
 
-// A customer is active if they currently hold gallons, or made a transaction within the
-// last 31 days. No stored/scheduled status — always derived fresh from the data.
+// A customer is active if they visited (any transaction) within the last 60 days -- visits
+// only, so a balance alone doesn't count, and someone who never visited is inactive. Matches
+// the assistant's definition. No stored/scheduled status — always derived fresh from the data.
 export function isActiveCustomer(user) {
-  if (user.gallons > 0) {
-    return true;
-  }
   if (!user.lastTransactionAt) {
     return false;
   }

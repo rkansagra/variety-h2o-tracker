@@ -12,6 +12,10 @@ import MenuTab from "./tabs/MenuTab";
 import LocationTab from "./tabs/LocationTab";
 import SettingsTab from "./tabs/SettingsTab";
 
+// The logo file's pixel size (1080px wide: the 360px-max banner at 3x).
+const LOGO_WIDTH = 1080;
+const LOGO_HEIGHT = 470;
+
 // The signed-in (or browsing) app: logo banner or desktop top bar, the active tab, and the bottom
 // tab bar. Tabs are state here, not routes.
 export function MainApp() {
@@ -34,10 +38,14 @@ export function MainApp() {
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   // Phone only: the list and a customer's details are separate views.
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
-  // Kept here rather than in AdminPanel so the admin's search and selection survive switching tabs.
+  // "Ask the ledger" conversation: [{ question, answer, toolCalls }].
+  const [assistantTurns, setAssistantTurns] = useState([]);
+  // Kept here rather than in AdminPanel so the admin's search, selection, and assistant
+  // conversation survive switching tabs.
   const adminView = {
     searchQuery, setSearchQuery, adminFilter, setAdminFilter, adminSort, setAdminSort,
     selectedCustomerId, setSelectedCustomerId, showCustomerDetail, setShowCustomerDetail,
+    assistantTurns, setAssistantTurns,
   };
   const sizeClass = useSizeClass();
   const isDesktop = sizeClass === "desktop";
@@ -57,7 +65,7 @@ export function MainApp() {
         {isDesktop ? (
           // Desktop: a top bar replaces both the logo banner and the bottom tab bar.
           <header id="vh2o-top-nav" className="vh2o-topbar">
-            <img id="vh2o-top-nav-logo" className="vh2o-topbar-logo" src={img} alt="Variety H2O + Ice Cream" />
+            <img id="vh2o-top-nav-logo" className="vh2o-topbar-logo" src={img} alt="Variety H2O + Ice Cream" width={LOGO_WIDTH} height={LOGO_HEIGHT} />
             <nav aria-label="Main" className="vh2o-topbar-tabs">
               {[
                 ["tracker", House, "Home"],
@@ -102,7 +110,8 @@ export function MainApp() {
             <div style={styles.headerBg} />
             <div style={styles.headerContent}>
               <div style={styles.storeName}>
-                  <img id="vh2o-app-header-logo" className="vh2o-banner-logo" src={img} alt="Variety H2O + Ice Cream" style={{ width: "100%" }}/>
+                  {/* width/height are the file's own size, so the browser reserves the space before it loads. */}
+                  <img id="vh2o-app-header-logo" className="vh2o-banner-logo" src={img} alt="Variety H2O + Ice Cream" width={LOGO_WIDTH} height={LOGO_HEIGHT} style={{ width: "100%", height: "auto" }}/>
               </div>
             </div>
           </div>

@@ -39,6 +39,19 @@ export function UserProvider({ children }) {
 
   const refreshFromSupabase = async (authUserId = null) => {
     try {
+      // Signed out: RLS would refuse the reads below (a 401 in the console on every visit), so
+      // just clear what a previous user left behind.
+      if (!authUserId) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          setUsers([]);
+          setNotifications([]);
+          setUnlinkedAuthEmail(null);
+          setCurrentUser(null);
+          return true;
+        }
+      }
+
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("id, auth_user_id, email, role, gallons, name, member_since, legacy_id, water_type, claim_code, last_transaction_at, anonymized_at")
@@ -563,6 +576,29 @@ export function UserProvider({ children }) {
     return { ok: true };
   };
 
+  // "Ask the ledger" (admin only): the admin-assistant Edge Function answers from read-only
+  // database tools and reports each tool it called. `history` is earlier { question, answer }
+  // turns, so follow-ups like "and last week?" work.
+  const askAssistant = async (question, history = []) => {
+    const { data, error } = await supabase.functions.invoke("admin-assistant", {
+      body: { question, history },
+    });
+
+    if (error) {
+      // An HTTP error from the function carries its JSON body ({ error }) in error.context.
+      let message = "The assistant isn't available right now. Try again later.";
+      try {
+        const body = await error.context?.json();
+        if (body?.error) message = body.error;
+      } catch {
+        // Not JSON (e.g. a network failure): keep the generic message.
+      }
+      return { ok: false, message };
+    }
+
+    return { ok: true, answer: data.answer, toolCalls: data.toolCalls || [] };
+  };
+
   const updateWaterType = async (profileId, waterType) => {
     const { error } = await supabase
       .from("profiles")
@@ -650,6 +686,7 @@ export function UserProvider({ children }) {
         fetchUserHistory,
         generateClaimCode,
         anonymizeCustomer,
+        askAssistant,
         updateWaterType,
         claimProfile,
         notifications,

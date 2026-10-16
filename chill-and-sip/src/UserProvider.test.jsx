@@ -46,6 +46,35 @@ function renderProvider() {
   };
 }
 
+describe("UserProvider / signed out", () => {
+  it("doesn't read customer data without a session", async () => {
+    state.setRows("profiles", [], { message: "permission denied" });
+    renderProvider();
+
+    await waitFor(() => expect(auth.getSession).toHaveBeenCalled());
+    await act(async () => {});
+    expect(state.calls).toEqual([]);
+    expect(screen.getByTestId("current-user")).toHaveTextContent("none");
+  });
+
+  it("clears the previous user's data on sign-out", async () => {
+    state.user = { id: "auth-1", email: "jane@example.com" };
+    state.setRows("profiles", [
+      { id: "profile-1", auth_user_id: "auth-1", email: "jane@example.com", role: "user", gallons: 10, name: "Jane", legacy_id: 1 },
+    ]);
+    state.setRows("gallon_transactions", []);
+    const { getCtx } = renderProvider();
+    await waitFor(() => expect(screen.getByTestId("current-user")).toHaveTextContent("jane@example.com"));
+
+    state.calls = [];
+    await act(async () => state.emitAuthStateChange("SIGNED_OUT", null));
+
+    await waitFor(() => expect(screen.getByTestId("current-user")).toHaveTextContent("none"));
+    expect(getCtx().users).toEqual([]);
+    expect(state.calls).toEqual([]);
+  });
+});
+
 describe("UserProvider / login()", () => {
   it("signs a user in and loads their profile when a matching profiles row exists", async () => {
     auth.signInWithPasswordResult = { data: { user: { id: "auth-1" } }, error: null };
@@ -232,6 +261,42 @@ describe("UserProvider / admin actions", () => {
     });
 
     expect(result).toEqual({ ok: false, message: "Admin accounts cannot be anonymized" });
+  });
+
+  it("asks the admin-assistant Edge Function and returns its answer and lookups", async () => {
+    const toolCalls = [{ name: "balance_summary", args: {}, rowCount: 1 }];
+    state.functionResults["admin-assistant"] = { data: { answer: "5,000 gallons are outstanding.", toolCalls }, error: null };
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    const history = [{ question: "q1", answer: "a1" }];
+    await act(async () => {
+      result = await getCtx().askAssistant("How much is outstanding?", history);
+    });
+
+    expect(sharedMock.client.functions.invoke).toHaveBeenCalledWith("admin-assistant", {
+      body: { question: "How much is outstanding?", history },
+    });
+    expect(result).toEqual({ ok: true, answer: "5,000 gallons are outstanding.", toolCalls });
+  });
+
+  it("passes the assistant's own error message through, or a generic one", async () => {
+    const getCtx = await renderAsAdmin();
+    state.functionResults["admin-assistant"] = {
+      data: null,
+      error: { context: { json: async () => ({ error: "Only admins can use the assistant" }) } },
+    };
+    let result;
+    await act(async () => {
+      result = await getCtx().askAssistant("q");
+    });
+    expect(result).toEqual({ ok: false, message: "Only admins can use the assistant" });
+
+    state.functionResults["admin-assistant"] = { data: null, error: new Error("Failed to fetch") };
+    await act(async () => {
+      result = await getCtx().askAssistant("q");
+    });
+    expect(result).toEqual({ ok: false, message: "The assistant isn't available right now. Try again later." });
   });
 });
 

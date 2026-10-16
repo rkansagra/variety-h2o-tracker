@@ -48,6 +48,7 @@ export function createSupabaseMock() {
     session: null,
     user: null,
     rpcResults: {}, // fnName -> { data, error } | (args) => ({ data, error })
+    functionResults: {}, // Edge Function name -> { data, error } | (options) => ({ data, error })
     authStateCallback: null,
     setRows(table, data, error = null) {
       state.responses[table] = { data, error };
@@ -66,7 +67,9 @@ export function createSupabaseMock() {
 
   const auth = {
     getUser: vi.fn(async () => ({ data: { user: state.user } })),
-    getSession: vi.fn(async () => ({ data: { session: state.session } })),
+    // A signed-in user always has a session in real supabase-js, so tests that only set
+    // state.user still count as signed in.
+    getSession: vi.fn(async () => ({ data: { session: state.session ?? (state.user ? { user: state.user } : null) } })),
     onAuthStateChange: vi.fn((cb) => {
       state.authStateCallback = cb;
       return { data: { subscription: { unsubscribe: vi.fn() } } };
@@ -100,6 +103,12 @@ export function createSupabaseMock() {
       return ch;
     }),
     removeChannel: vi.fn(),
+    functions: {
+      invoke: vi.fn(async (name, options) => {
+        const resolver = state.functionResults[name];
+        return typeof resolver === "function" ? resolver(options) : resolver ?? { data: null, error: null };
+      }),
+    },
   };
 
   return { client, state, auth };
@@ -119,6 +128,7 @@ export function resetSupabaseMock() {
   sharedMock.state.singleResponses = {};
   sharedMock.state.calls = [];
   sharedMock.state.rpcResults = {};
+  sharedMock.state.functionResults = {};
   sharedMock.state.session = null;
   sharedMock.state.user = null;
   sharedMock.state.authStateCallback = null;

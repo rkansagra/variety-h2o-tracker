@@ -22,3 +22,40 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+
+  # schema.sql must run from scratch, and the SQL tests check the database-side security
+  # (e.g. that the assistant's tools are read-only and admin-only). Plain Postgres plus a stub
+  # of the Supabase pieces schema.sql uses (supabase/tests/supabase_stub.sql).
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: chill-and-sip/supabase
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - run: psql -v ON_ERROR_STOP=1 -f tests/supabase_stub.sql
+      - run: psql -v ON_ERROR_STOP=1 -f schema.sql
+      # Again, to prove it's safe to re-run.
+      - run: psql -v ON_ERROR_STOP=1 -f schema.sql
+      - run: |
+          for test in tests/*.test.sql; do
+            echo "== $test"
+            psql -v ON_ERROR_STOP=1 -f "$test"
+          done

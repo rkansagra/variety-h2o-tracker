@@ -17,7 +17,9 @@ only) plus a Meta for Developers app and Supabase provider config.
 ### 3. "Ask the ledger" assistant (admin only)
 Owners type plain-language questions about customers, balances, and visits (e.g. "Who hasn't come
 in for 60 days?", "How much prepaid balance is outstanding?", "What were last week's busiest
-days?") and get answers grounded in the live data. Not started -- planned only.
+days?") and get answers grounded in the live data. **In progress** (branch `admin-assistant`): the
+tools, Edge Function, admin UI, and tests are built; the eval suite and the owners' API key are
+still to do.
 
 **Architecture constraints:**
 - Runs in a Supabase Edge Function. The Anthropic API key lives only in Edge Function secrets,
@@ -33,27 +35,36 @@ days?") and get answers grounded in the live data. Not started -- planned only.
   the numbers came from.
 
 **Subtasks:**
-1. Define the initial read-only tool set as Postgres functions, with tests. Starting candidates:
-   `customers_inactive_since(days)`, `outstanding_balance_total()`, `visits_by_day(start, end)`,
-   `top_customers_by_visits(range)`, `customer_lookup(name_or_phone)`.
-2. Edge Function: auth/admin check, Claude tool-use loop, input validation on tool arguments, a
-   max-iterations cap, a timeout, and error handling.
-3. Admin UI: a simple ask box and answer view with a "tools used" disclosure, working on phone,
-   tablet, and desktop layouts (new DOM IDs go in `TEST_IDS.md`).
+1. ~~Read-only tool set as Postgres functions, with tests.~~ Built: `assistant_balance_summary`,
+   `assistant_customers_inactive_since`, `assistant_visits_by_day`, `assistant_top_customers`,
+   `assistant_customer_lookup`, `assistant_customer_history` (`schema.sql`). They're `STABLE`
+   (Postgres refuses writes inside them) and `SECURITY INVOKER`, and refuse non-admins.
+   `supabase/tests/assistant_tools.test.sql` checks all of that in CI.
+2. ~~Edge Function~~ Built (`supabase/functions/admin-assistant/`): admin check, tool-use loop with
+   an allowlist, argument validation, a 6-step cap, a 60-second timeout, and error handling. It
+   uses the admin's own login over read-only GET calls, never the service-role key.
+3. ~~Admin UI~~ Built: an "Ask the ledger" panel above the customer list, with example questions,
+   follow-ups, and a "Lookups used" disclosure under each answer.
 4. Eval suite: 20-30 realistic owner questions with known correct answers against a seeded test
    dataset, run in GitHub Actions alongside the Vitest suite. Include adversarial cases that must
    be refused or handled safely: requests to change a balance, oddly framed requests for another
    customer's data, and prompt injection via customer name fields.
-5. Logging: per-request token usage, latency, tools called, and success/failure -- no customer PII
-   in logs beyond what's strictly necessary.
-6. Unit/integration tests for the Edge Function and the tool functions.
+5. ~~Logging~~ Built: one JSON line per request in the function logs (tool names, iterations,
+   tokens, latency, outcome), with no question text, arguments, or results.
+6. ~~Unit/integration tests~~ Built: Vitest for the loop, UI, and provider; SQL tests for the tools.
+7. Go live: an Anthropic API key in the Edge Function secrets (whose account, and a spend cap),
+   apply the `schema.sql` changes, deploy the function, and try it on a Deploy Preview.
 
-**Open questions to settle before building** (found against the current schema):
-- There's no visits table -- "visits" would have to be derived from `gallon_transactions` rows
-  (e.g. one visit per customer per day). Decide the definition before writing `visits_by_day` /
-  `top_customers_by_visits`.
-- `profiles` has no phone column, so `customer_lookup(name_or_phone)` needs a different key (name,
-  email, legacy ID) or a schema change.
+**Decisions made while building** (easy to change if the owners see it differently):
+- A **visit** is one customer on one store-local day (Tucson, `America/Phoenix`) with at least one
+  ledger entry, a fill or a purchase. The forfeit written when an account is deleted doesn't count.
+- **Customer lookup** matches the customer number, or part of a name or email (no phone column).
+  Emails are never sent to the model.
+- **Inactive** means no visit in the last 60 days, and includes customers who have never visited
+  (decided 2026-10-16). The admin screen's Active/Inactive status now uses the same rule: the
+  window went from 31 to 60 days, and a balance alone no longer makes a customer active. Most of the 400
+  imported customers have no ledger history yet, so lists put customers who have visited first
+  (longest-absent first), and answers say how many have never visited.
 
 **Before implementing:** verify current Anthropic SDK / model names and Supabase Edge Function
 conventions against the docs.
@@ -66,8 +77,6 @@ review and send manually -- never auto-sent.
 ## Open operational tasks
 - **Google Play review:** version 1.0 was submitted on 2026-10-15 and goes live in the US as soon as
   Google approves it. Keep the reviewer account unchanged until then.
-- **Test Google sign-in end to end** on varietyh2o.com (now live there): a Google account matching
-  an existing customer's email should land in their tracker.
 
 ## Decided against
 - **Apple Sign-In:** only required by App Store Review Guideline 4.8, and iOS ships as an

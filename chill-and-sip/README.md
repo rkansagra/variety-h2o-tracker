@@ -133,6 +133,15 @@ build doesn't resolve under Vitest at all -- see the comment there). There is cu
 suite against a running app/browser -- `TEST_IDS.md`'s selectors exist for that if it's added
 later.
 
+Vitest also runs `supabase/functions/admin-assistant/assistant.test.ts`, the assistant's tool
+loop with a fake Anthropic client.
+
+**Database tests** (`supabase/tests/*.test.sql`) check the database side, such as that the
+assistant's tools are read-only and admin-only. Each one seeds its own data and rolls back. CI's
+`database` job runs them on plain Postgres after `supabase/tests/supabase_stub.sql` (the Supabase
+roles, `auth.uid()`, and so on) and `schema.sql`, twice, to prove it re-runs. You can also paste
+one into the Supabase SQL editor; it changes nothing.
+
 ## Documentation map
 
 - `SUPABASE_SETUP.md` — required auth and database setup for a developer environment

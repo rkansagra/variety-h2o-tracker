@@ -558,6 +558,116 @@ html[data-size="desktop"] .vh2o-admin-rows {
   font-size: 12px;
 }
 
+/* ─── "Ask the ledger" assistant (admin Home tab, above the customer panels) ──────────────── */
+.vh2o-assistant {
+  margin-top: var(--vh2o-space-3);
+  border: 1px solid var(--vh2o-border);
+  border-radius: 14px;
+  background: var(--vh2o-surface-subtle);
+  text-align: left;
+}
+
+.vh2o-assistant-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--vh2o-space-2);
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  color: var(--vh2o-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vh2o-assistant-chevron {
+  margin-left: auto;
+  transition: transform 0.15s;
+}
+
+.vh2o-assistant-toggle[aria-expanded="true"] .vh2o-assistant-chevron {
+  transform: rotate(180deg);
+}
+
+.vh2o-assistant-body {
+  display: grid;
+  gap: var(--vh2o-space-3);
+  padding: 0 14px 14px;
+}
+
+.vh2o-assistant-body .vh2o-chip {
+  text-align: left;
+}
+
+.vh2o-assistant-turns {
+  display: grid;
+  gap: var(--vh2o-space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 50dvh;
+  overflow-y: auto;
+}
+
+.vh2o-assistant-turn {
+  display: grid;
+  gap: 6px;
+}
+
+.vh2o-assistant-question {
+  justify-self: end;
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px 12px 2px 12px;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--vh2o-text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.vh2o-assistant-answer {
+  color: var(--vh2o-text);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.vh2o-assistant-tools {
+  color: var(--vh2o-text-subtle);
+  font-size: 12px;
+}
+
+.vh2o-assistant-tools summary {
+  cursor: pointer;
+}
+
+.vh2o-assistant-tools ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.vh2o-assistant-tools code {
+  overflow-wrap: anywhere;
+}
+
+.vh2o-assistant-form {
+  display: grid;
+  gap: var(--vh2o-space-2);
+}
+
+.vh2o-assistant-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--vh2o-space-2);
+}
+
+.vh2o-assistant-actions button[type="submit"] {
+  flex: 1;
+}
+
 .vh2o-chip-row {
   display: flex;
   flex-wrap: wrap;

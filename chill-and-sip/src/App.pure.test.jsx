@@ -110,26 +110,30 @@ describe("isActiveCustomer", () => {
     vi.useRealTimers();
   });
 
-  it("is active whenever the customer currently holds gallons, regardless of last transaction", () => {
-    expect(isActiveCustomer({ gallons: 1, lastTransactionAt: null })).toBe(true);
+  it("counts visits only: a balance alone doesn't make a customer active", () => {
+    expect(isActiveCustomer({ gallons: 500, lastTransactionAt: null })).toBe(false);
+    const ninetyDaysAgo = new Date("2026-03-17T00:00:00Z").toISOString();
+    expect(isActiveCustomer({ gallons: 500, lastTransactionAt: ninetyDaysAgo })).toBe(false);
   });
 
-  it("is inactive with zero gallons and no transaction history", () => {
+  it("is inactive with no transaction history", () => {
     expect(isActiveCustomer({ gallons: 0, lastTransactionAt: null })).toBe(false);
   });
 
-  it("is active with zero gallons if the last transaction was within the 31-day window", () => {
+  it("is active if the last transaction was within the 60-day window", () => {
     const tenDaysAgo = new Date("2026-06-05T00:00:00Z").toISOString();
     expect(isActiveCustomer({ gallons: 0, lastTransactionAt: tenDaysAgo })).toBe(true);
   });
 
-  it("is inactive with zero gallons once the last transaction falls outside the window", () => {
-    const thirtyTwoDaysAgo = new Date("2026-05-14T00:00:00Z").toISOString();
-    expect(isActiveCustomer({ gallons: 0, lastTransactionAt: thirtyTwoDaysAgo })).toBe(false);
+  it("is inactive once the last transaction falls outside the window", () => {
+    const fiftyDaysAgo = new Date("2026-04-26T00:00:00Z").toISOString();
+    expect(isActiveCustomer({ gallons: 0, lastTransactionAt: fiftyDaysAgo })).toBe(true);
+    const sixtyOneDaysAgo = new Date("2026-04-15T00:00:00Z").toISOString();
+    expect(isActiveCustomer({ gallons: 0, lastTransactionAt: sixtyOneDaysAgo })).toBe(false);
   });
 
-  it("is active exactly at the 31-day boundary", () => {
-    const exactlyBoundary = new Date("2026-06-15T00:00:00Z").getTime() - 31 * 24 * 60 * 60 * 1000;
+  it("is active exactly at the 60-day boundary", () => {
+    const exactlyBoundary = new Date("2026-06-15T00:00:00Z").getTime() - 60 * 24 * 60 * 60 * 1000;
     expect(isActiveCustomer({ gallons: 0, lastTransactionAt: new Date(exactlyBoundary).toISOString() })).toBe(true);
   });
 });

@@ -98,11 +98,35 @@ without staff already having their email:
 - `profiles.water_type` (`purified` / `remineralized` / `alkaline` / null) is informational only —
   shown in Manage Users and on the customer's own tracker — so staff can see at a glance what to
   charge at the register. It has no effect on gallons math; pricing/tiers are handled by staff.
-- Active/Inactive is never stored — the app computes it live from `gallons > 0 OR last_transaction_at
-  within the last 31 days`. `last_transaction_at` is set only by `admin_adjust_gallons(...)`, never by
-  editing water type or generating a claim code, so it always reflects real purchase activity.
+- Active/Inactive is never stored — the app computes it live: active means `last_transaction_at`
+  within the last 60 days. Visits only: a balance alone doesn't count, which matches the assistant.
+  `last_transaction_at` is set only by `admin_adjust_gallons(...)`, never by editing water type or
+  generating a claim code, so it always reflects real purchase activity.
 
-## 8) Auth history and future plans
+## 8) "Ask the ledger" assistant (admin only)
+
+Admins can ask plain-language questions about customers, balances, and visits from the Home tab.
+The pieces:
+
+- **Read-only tools**: the `assistant_*` functions in `schema.sql`. They're `STABLE`, so they can't
+  write, and `SECURITY INVOKER`, so they run under the caller's RLS. Each one refuses anyone who
+  isn't an admin. They never return email addresses.
+- **Edge Function** `supabase/functions/admin-assistant/`: checks the caller is an admin, then runs
+  Claude with only those tools (`assistant.ts`). It calls the database with the caller's own login
+  over read-only GET requests, never with the service-role key. It logs tool names, token counts,
+  and timing to the function logs, but no questions, arguments, or results.
+- **UI**: `src/admin/AssistantPanel.jsx`, through `askAssistant()` in `UserProvider.jsx`.
+
+To set it up on a project:
+
+1. Run `schema.sql` (it includes the tools).
+2. Add the Edge Function secret `ANTHROPIC_API_KEY` (Dashboard -> Edge Functions -> Secrets).
+   Optionally set `ASSISTANT_MODEL` (default `claude-sonnet-5-5`).
+3. Deploy: `supabase functions deploy admin-assistant` (JWT verification stays on).
+
+Without the API key the function answers "The assistant isn't set up yet (no API key)".
+
+## 9) Auth history and future plans
 
 Customer/admin auth briefly switched to phone number + password (to avoid email friction and set
 up future SMS features), then was reverted back to email + password. That attempt is why you may

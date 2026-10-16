@@ -5,10 +5,12 @@ import { ICON_SIZE, buttonProps, useDialog } from "../lib/ui";
 import { WATER_TYPE_LABELS, filterCustomers, isActiveCustomer } from "../lib/customers";
 import { styles } from "../styles";
 import AdminUserRow from "./AdminUserRow";
+import AssistantPanel from "./AssistantPanel";
 
-// The admin's Home tab: customer search/list beside one customer's card, plus the credit/debit
-// confirmation and full-history sheets. The list state (search, filter, sort, selection) comes
-// from MainApp in `view` so it survives switching tabs.
+// The admin's Home tab: the "Ask the ledger" assistant, customer search/list beside one
+// customer's card, plus the credit/debit confirmation and full-history sheets. The list state
+// (search, filter, sort, selection) and the assistant conversation come from MainApp in `view`
+// so they survive switching tabs.
 export default function AdminPanel({ view, sizeClass }) {
   const {
     users, adjustGallons, fetchUserHistory, updateWaterType, generateClaimCode, anonymizeCustomer,
@@ -16,6 +18,7 @@ export default function AdminPanel({ view, sizeClass }) {
   const {
     searchQuery, setSearchQuery, adminFilter, setAdminFilter, adminSort, setAdminSort,
     selectedCustomerId, setSelectedCustomerId, showCustomerDetail, setShowCustomerDetail,
+    assistantTurns, setAssistantTurns,
   } = view;
   const [pendingAdjustment, setPendingAdjustment] = useState(null); // { user, amount, note }
   const [adjustmentError, setAdjustmentError] = useState("");
@@ -71,6 +74,7 @@ export default function AdminPanel({ view, sizeClass }) {
     <>
       <div id="vh2o-admin-manage-users" className="vh2o-admin" style={{ marginTop: 20 }}>
         <div id="vh2o-admin-manage-users-title" style={styles.sectionTitle}>Admin: Customers</div>
+        <AssistantPanel turns={assistantTurns} setTurns={setAssistantTurns} />
         {(() => {
           const customers = users.filter((u) => u.role === "user");
           const activeCount = customers.filter(isActiveCustomer).length;

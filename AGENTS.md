@@ -22,6 +22,10 @@
 - Code is split by role under `chill-and-sip/src/`: `screens/` (one per route, plus `screens/tabs/`
   for MainApp's four tabs), `admin/`, `components/`, `menu/` (menu data), and `lib/` (pure helpers
   and hooks, no Supabase calls). New code goes in the module for its role, not back into `App.jsx`.
+- The admin-only "Ask the ledger" assistant is the one server-side piece: a Supabase Edge Function
+  (`chill-and-sip/supabase/functions/admin-assistant/`) that lets Claude call only the read-only
+  `assistant_*` Postgres functions. Keep it read-only: never give it a tool that writes, raw SQL, or
+  the service-role key. Setup is in `SUPABASE_SETUP.md`.
 - `UserProvider.jsx` owns auth/session state, the customer/profile list, and transaction
   notifications, and is the only place that reads or writes app data in Supabase (screens may
   still check the auth session, as `ClaimAccount` does). Components read it with
@@ -62,7 +66,9 @@
 - PWA config is in `chill-and-sip/vite.config.js` via `vite-plugin-pwa` (standalone manifest, no orientation lock).
 - Tests are Vitest + React Testing Library (`chill-and-sip/src/*.test.jsx`, config in
   `chill-and-sip/vitest.config.js`, shared mocks in `chill-and-sip/src/test/`). GitHub Actions
-  (`.github/workflows/test.yml`) runs lint, tests, and build on every PR and push to `main`. Still
+  (`.github/workflows/test.yml`) runs lint, tests, and build on every PR and push to `main`, plus
+  the database tests (`chill-and-sip/supabase/tests/*.test.sql`, on plain Postgres). Database
+  security (RLS, admin checks, grants) gets a `.test.sql` test, not just a review. Still
   sanity-check manual flows the tests don't cover (admin login, claim flow, gallons credit/debit,
   claim-code generation, anything native-only).
 - `main` is branch-protected -- changes go through a pull request, not a direct push. Netlify only

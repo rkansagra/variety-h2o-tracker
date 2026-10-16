@@ -24,11 +24,11 @@ const customer = (overrides) => ({
   memberSince: "1/1/2025",
   ...overrides,
 });
-// Active = holds gallons or transacted in the last 31 days; "no login" = no authUserId.
+// Active = a transaction (visit) in the last 60 days; "no login" = no authUserId.
 const USERS = [
   { id: 1, role: "admin", name: "Store Admin", email: "admin@example.com", gallons: 0, authUserId: "a-1" },
-  customer({ id: 1042, profileId: "p-1042", name: "Alex Rivera", email: "alex@example.com", gallons: 342, authUserId: "u-1", waterType: "remineralized" }),
-  customer({ id: 1051, profileId: "p-1051", name: "Dana Brooks", gallons: 75 }),
+  customer({ id: 1042, profileId: "p-1042", name: "Alex Rivera", email: "alex@example.com", gallons: 342, authUserId: "u-1", waterType: "remineralized", lastTransactionAt: now }),
+  customer({ id: 1051, profileId: "p-1051", name: "Dana Brooks", gallons: 75, lastTransactionAt: now }),
   customer({ id: 1066, name: "Marcus Lee", email: "marcus@example.com", authUserId: "u-2" }),
   customer({ id: 1088, name: "jordan kim", email: "jkim@example.com", authUserId: "u-3", lastTransactionAt: now }),
 ];

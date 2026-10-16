@@ -131,6 +131,23 @@ Dynamic transaction rows:
 - `vh2o-admin-customer-detail-empty` (nothing selected yet)
 - `vh2o-admin-back-btn` (phone only)
 
+"Ask the ledger" assistant (above the customer panels):
+
+- `vh2o-admin-assistant`
+- `vh2o-admin-assistant-toggle` (`aria-expanded`)
+- `vh2o-admin-assistant-body` (only while open)
+- `vh2o-admin-assistant-example-<index>` (only before the first question)
+- `vh2o-admin-assistant-turns`
+- `vh2o-admin-assistant-turn-<index>`
+- `vh2o-admin-assistant-question-<index>`
+- `vh2o-admin-assistant-answer-<index>`
+- `vh2o-admin-assistant-tools-<index>` (lookups used; absent when there were none)
+- `vh2o-admin-assistant-loading`
+- `vh2o-admin-assistant-error`
+- `vh2o-admin-assistant-input`
+- `vh2o-admin-assistant-submit`
+- `vh2o-admin-assistant-clear`
+
 Dynamic customer rows:
 
 - `vh2o-admin-user-card-<userId>`

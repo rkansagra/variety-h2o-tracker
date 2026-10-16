@@ -215,6 +215,8 @@ grant execute on function public.admin_adjust_gallons(uuid, integer, text) to au
 revoke all on public.profiles from anon;
 revoke all on public.gallon_transactions from anon;
 revoke execute on function public.is_admin(uuid) from public, anon;
+-- The RLS policies above call it as the signed-in user.
+grant execute on function public.is_admin(uuid) to authenticated;
 revoke execute on function public.admin_adjust_gallons(uuid, integer, text) from anon;
 
 -- Admin-only: (re)generate a claim code for a customer who hasn't linked a login yet.
@@ -388,12 +390,299 @@ $$;
 revoke all on function public.admin_anonymize_customer(uuid) from public, anon;
 grant execute on function public.admin_anonymize_customer(uuid) to authenticated;
 
+-- "Ask the ledger" assistant tools (ROADMAP item 3). The admin-assistant Edge Function lets
+-- Claude call only these functions, by name, with the admin's own login. Each one is:
+--   - read-only: STABLE, so Postgres rejects any INSERT/UPDATE/DELETE inside it, and the Edge
+--     Function calls them over GET, which PostgREST runs in a read-only transaction;
+--   - SECURITY INVOKER (the default): queries run under the caller's RLS, not as the owner;
+--   - admin-only: assistant_require_admin() raises for anyone else.
+-- They never return email addresses (lookup can match on one), to keep what reaches the model
+-- to what an answer needs.
+--
+-- A "visit" is one customer on one store-local (Tucson, America/Phoenix) day with at least one
+-- ledger entry. Fills are debits (amount < 0) and purchases are credits (amount > 0). The
+-- forfeit row written by admin_anonymize_customer() is not a visit.
+create or replace function public.assistant_require_admin()
+returns void
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Only admins can use the assistant';
+  end if;
+end;
+$$;
+
+create or replace function public.assistant_balance_summary()
+returns table (
+  customers integer,
+  customers_with_balance integer,
+  outstanding_gallons bigint,
+  customers_with_login integer,
+  customers_never_visited integer,
+  deleted_customers integer,
+  first_ledger_day date,
+  last_ledger_day date
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  perform public.assistant_require_admin();
+  return query
+  select
+    count(*)::integer,
+    (count(*) filter (where p.gallons > 0))::integer,
+    coalesce(sum(p.gallons), 0)::bigint,
+    (count(*) filter (where p.auth_user_id is not null))::integer,
+    (count(*) filter (where p.last_transaction_at is null and p.anonymized_at is null))::integer,
+    (count(*) filter (where p.anonymized_at is not null))::integer,
+    (select min((t.created_at at time zone 'America/Phoenix')::date) from public.gallon_transactions t),
+    (select max((t.created_at at time zone 'America/Phoenix')::date) from public.gallon_transactions t)
+  from public.profiles p
+  where p.role = 'user';
+end;
+$$;
+
+create or replace function public.assistant_customers_inactive_since(p_days integer, p_limit integer default 25)
+returns table (
+  legacy_id integer,
+  name text,
+  gallons integer,
+  last_visit_day date,
+  days_since_visit integer,
+  total_matching integer
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  perform public.assistant_require_admin();
+  if p_days is null or p_days < 1 or p_days > 3650 then
+    raise exception 'days must be between 1 and 3650';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'limit must be between 1 and 100';
+  end if;
+  -- Customers with no visit at all count as inactive too (last_visit_day and days_since_visit are
+  -- null). They're listed after everyone who has visited, so lapsed regulars come first.
+  return query
+  select
+    p.legacy_id,
+    p.name,
+    p.gallons,
+    (p.last_transaction_at at time zone 'America/Phoenix')::date,
+    ((now() at time zone 'America/Phoenix')::date - (p.last_transaction_at at time zone 'America/Phoenix')::date),
+    (count(*) over ())::integer
+  from public.profiles p
+  where p.role = 'user'
+    and p.anonymized_at is null
+    and (p.last_transaction_at is null or p.last_transaction_at < now() - make_interval(days => p_days))
+  order by p.last_transaction_at nulls last, p.name
+  limit p_limit;
+end;
+$$;
+
+create or replace function public.assistant_visits_by_day(p_start date, p_end date)
+returns table (
+  day date,
+  weekday text,
+  visits integer,
+  gallons_filled bigint,
+  gallons_purchased bigint
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  perform public.assistant_require_admin();
+  if p_start is null or p_end is null or p_start > p_end then
+    raise exception 'start must be on or before end';
+  end if;
+  if p_end - p_start > 366 then
+    raise exception 'range must be at most 366 days';
+  end if;
+  return query
+  with entries as (
+    select t.user_profile_id, (t.created_at at time zone 'America/Phoenix')::date as d, t.amount
+    from public.gallon_transactions t
+    where t.note is distinct from 'Balance forfeited: account deleted'
+      and t.created_at >= (p_start::timestamp at time zone 'America/Phoenix')
+      and t.created_at < ((p_end + 1)::timestamp at time zone 'America/Phoenix')
+  )
+  select
+    g.d::date,
+    to_char(g.d, 'Dy'),
+    (select count(distinct e.user_profile_id) from entries e where e.d = g.d)::integer,
+    (select coalesce(sum(-e.amount), 0) from entries e where e.d = g.d and e.amount < 0)::bigint,
+    (select coalesce(sum(e.amount), 0) from entries e where e.d = g.d and e.amount > 0)::bigint
+  from generate_series(p_start, p_end, interval '1 day') as g(d)
+  order by 1;
+end;
+$$;
+
+create or replace function public.assistant_top_customers(p_start date, p_end date, p_limit integer default 10)
+returns table (
+  legacy_id integer,
+  name text,
+  visits integer,
+  gallons_filled bigint,
+  gallons_purchased bigint
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  perform public.assistant_require_admin();
+  if p_start is null or p_end is null or p_start > p_end then
+    raise exception 'start must be on or before end';
+  end if;
+  if p_end - p_start > 366 then
+    raise exception 'range must be at most 366 days';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 50 then
+    raise exception 'limit must be between 1 and 50';
+  end if;
+  return query
+  select
+    p.legacy_id,
+    p.name,
+    count(distinct (t.created_at at time zone 'America/Phoenix')::date)::integer,
+    coalesce(sum(-t.amount) filter (where t.amount < 0), 0)::bigint,
+    coalesce(sum(t.amount) filter (where t.amount > 0), 0)::bigint
+  from public.gallon_transactions t
+  join public.profiles p on p.id = t.user_profile_id
+  where p.role = 'user'
+    and p.anonymized_at is null
+    and t.created_at >= (p_start::timestamp at time zone 'America/Phoenix')
+    and t.created_at < ((p_end + 1)::timestamp at time zone 'America/Phoenix')
+  group by p.id
+  order by 3 desc, 4 desc, p.legacy_id
+  limit p_limit;
+end;
+$$;
+
+-- Matches a customer number exactly, or part of a name or email (case-insensitive).
+create or replace function public.assistant_customer_lookup(p_query text, p_limit integer default 10)
+returns table (
+  legacy_id integer,
+  name text,
+  gallons integer,
+  water_type text,
+  has_login boolean,
+  last_visit_day date
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  q text := trim(p_query);
+  as_number integer := case when trim(p_query) ~ '^[0-9]{1,9}$' then trim(p_query)::integer end;
+  pattern text;
+begin
+  perform public.assistant_require_admin();
+  if q is null or length(q) < 1 or length(q) > 100 then
+    raise exception 'query must be 1 to 100 characters';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 25 then
+    raise exception 'limit must be between 1 and 25';
+  end if;
+  pattern := '%' || replace(replace(replace(q, '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  return query
+  select
+    p.legacy_id,
+    p.name,
+    p.gallons,
+    p.water_type,
+    p.auth_user_id is not null,
+    (p.last_transaction_at at time zone 'America/Phoenix')::date
+  from public.profiles p
+  where p.role = 'user'
+    and p.anonymized_at is null
+    and (
+      p.legacy_id = as_number
+      or p.name ilike pattern
+      or p.email ilike pattern
+    )
+  order by p.legacy_id = as_number desc nulls last, p.name
+  limit p_limit;
+end;
+$$;
+
+create or replace function public.assistant_customer_history(p_legacy_id integer, p_limit integer default 20)
+returns table (
+  happened_at timestamp,
+  amount integer,
+  new_balance integer,
+  note text
+)
+language plpgsql
+stable
+set search_path = public
+as $$
+begin
+  perform public.assistant_require_admin();
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'limit must be between 1 and 100';
+  end if;
+  if not exists (
+    select 1 from public.profiles p
+    where p.legacy_id = p_legacy_id and p.role = 'user' and p.anonymized_at is null
+  ) then
+    raise exception 'No customer with that number';
+  end if;
+  -- happened_at is store-local time (America/Phoenix), without a zone.
+  return query
+  select (t.created_at at time zone 'America/Phoenix'), t.amount, t.new_balance, t.note
+  from public.gallon_transactions t
+  join public.profiles p on p.id = t.user_profile_id
+  where p.legacy_id = p_legacy_id
+  order by t.created_at desc
+  limit p_limit;
+end;
+$$;
+
+revoke all on function public.assistant_require_admin() from public, anon;
+revoke all on function public.assistant_balance_summary() from public, anon;
+revoke all on function public.assistant_customers_inactive_since(integer, integer) from public, anon;
+revoke all on function public.assistant_visits_by_day(date, date) from public, anon;
+revoke all on function public.assistant_top_customers(date, date, integer) from public, anon;
+revoke all on function public.assistant_customer_lookup(text, integer) from public, anon;
+revoke all on function public.assistant_customer_history(integer, integer) from public, anon;
+grant execute on function public.assistant_require_admin() to authenticated;
+grant execute on function public.assistant_balance_summary() to authenticated;
+grant execute on function public.assistant_customers_inactive_since(integer, integer) to authenticated;
+grant execute on function public.assistant_visits_by_day(date, date) to authenticated;
+grant execute on function public.assistant_top_customers(date, date, integer) to authenticated;
+grant execute on function public.assistant_customer_lookup(text, integer) to authenticated;
+grant execute on function public.assistant_customer_history(integer, integer) to authenticated;
+
 -- Lets a signed-in customer's client subscribe to their own balance/history changing
 -- (via Supabase Realtime `postgres_changes`) so an already-open app updates instantly
 -- when an admin adjusts their gallons elsewhere. Realtime enforces the same RLS
 -- policies as normal queries, so this doesn't expose any row a client couldn't already
 -- select directly.
-alter publication supabase_realtime add table public.profiles, public.gallon_transactions;
+-- Only adds a table that isn't already published, so this file stays safe to re-run.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['profiles', 'gallon_transactions'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
 
 -- The app only ever talks to Supabase via the REST/postgrest client and Realtime, never
 -- GraphQL. With pg_graphql installed, Supabase's default grants make every table any role
