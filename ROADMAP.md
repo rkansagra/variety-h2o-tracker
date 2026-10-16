@@ -64,10 +64,10 @@ conventions against the docs.
 review and send manually -- never auto-sent.
 
 ## Open operational tasks
+- **Google Play review:** version 1.0 was submitted on 2026-10-15 and goes live in the US as soon as
+  Google approves it. Keep the reviewer account unchanged until then.
 - **Test Google sign-in end to end** on varietyh2o.com (now live there): a Google account matching
   an existing customer's email should land in their tracker.
-- **Google Play release:** build a fresh signed `.aab` from `main` (picks up the native-side
-  changes from PRs #8-#23) and publish it to the production track in the Play Console.
 
 ## Decided against
 - **Apple Sign-In:** only required by App Store Review Guideline 4.8, and iOS ships as an
@@ -291,10 +291,57 @@ Play, WordPress.com) is noted where it happened.
 - **Claim flow fix** (PR #27, deployed 2026-10-15): with email confirmation on, `/claim` failed
   with "permission denied for function claim_profile"; it now asks the customer to open the
   confirmation link first.
-- **Brand icons**: the Vite/Capacitor placeholder icons and splash were replaced with the
-  "H2O + cone" mark from the logo, on white. Sources are in `chill-and-sip/assets/`; the Android
-  launcher icons and splash are generated from them with
+- **Brand icons** (PR #28, deployed 2026-10-15): the Vite/Capacitor placeholder icons and splash
+  were replaced with the "H2O + cone" mark from the logo, on white. Sources are in
+  `chill-and-sip/assets/`; the Android launcher icons and splash are generated from them with
   `npx @capacitor/assets generate --android` (never hand-edited).
+- **Google Play submission** (PR #29, submitted 2026-10-15):
+  - Android 1.0 was sent to the production track, US only, and goes live when Google approves it.
+  - It's `versionCode 3`, because codes 1 and 2 were used by earlier uploads that never shipped,
+    and Play never accepts a code twice. Users only see "1.0".
+  - Store listing: description, logo feature graphic, app icon, and phone screenshots.
+  - Declarations: Data safety (name, email, user IDs, and purchase history collected; nothing
+    shared), target audience 13+, and no advertising ID.
+  - A demo customer account for Google's reviewers.
+- **Security hardening and admin tests** (PR #30):
+  - `is_admin(uid)` now answers only for the caller. Before, any signed-in customer could ask
+    whether *any* account was an admin. Item 3 relies on it.
+  - Account-deletion requests are handled in the admin customer card ("Delete personal data…",
+    confirmed by typing the customer ID). This calls a new admin-only
+    `admin_anonymize_customer()`, which:
+    - clears the name, email, claim code, and water type, and deletes the login;
+    - forfeits any remaining balance with a matching ledger entry, as `/delete-account/` says;
+    - keeps the row and its transactions, because deleting a profile cascades to its
+      transactions, which are kept for 3 years. `anonymized_at` starts that clock.
+  - An anonymized customer can't be given a new claim code.
+  - New tests cover admin credit/debit with the confirmation step, claim-code generation, data
+    deletion, and the signed-out claim flow, against the fake Supabase client (89 → 109 tests).
+- **Google sign-in fix** (PR #31): Google returns to `/login`, and a customer whose login was
+  already linked stayed on the login form, so Google sign-in looked like it did nothing. The login
+  page now goes on to the app once someone is signed in (except mid password reset).
+- **Dependency updates:**
+  - Patch/minor: Capacitor 8.5.3 and plugins, `@supabase/supabase-js` 2.118, React 19.3.1, and
+    others. Capacitor's native side only reaches phones with the next Play upload.
+  - Major: Vite 8, `vite-plugin-pwa` 2, ESLint 10. `@vitejs/plugin-react` is at 5.2, not 6: 6
+    pulls in Babel 8, which conflicts with the PWA tooling's Babel 7. Retry once workbox moves to
+    Babel 8.
+  - Remaining `npm audit` findings (3 moderate) are in iOS build tooling (`@capacitor/cli` ->
+    `xcode` -> `uuid`), which isn't shipped.
+- **Bottom tab bar pinned:** it sat after the page content, so on any screen taller than the phone
+  it scrolled out of view. It's now sticky at the bottom, and the app frame uses `overflow: clip`
+  instead of `hidden`, which had made the frame its own scroll container and stopped sticky from
+  working.
+- **Play screenshots retaken** at 1080x1920 (Home, Menu, Ice Cream, Location), replacing the
+  500x829 set. Play needs at least 1080px per side for promotion eligibility.
+- **Supabase advisor warnings reviewed:** the "signed-in users can execute SECURITY DEFINER
+  function" warnings are expected. Customers and admins call those functions, each checks
+  permissions itself, and `is_admin` now only answers about the caller. Leaked password protection
+  needs the Supabase Pro plan.
+- **`App.jsx` split into modules:** the ~3,400-line file is now one module per role: screens, the
+  four tabs, the admin panel, menu data, `UserProvider`, styles, and pure helpers in `src/lib/`.
+  This is a deliberate change of convention; AGENTS.md describes the new layout. The code moved
+  verbatim, so DOM IDs and tests are unchanged. Two small differences: the admin's register-a-
+  customer form and an expanded menu item's description now reset when you leave their tab.
 
 ## Reference: tablet and desktop layout
 Built in PRs #18-#20. The decisions below still apply to any new or reworked screen.
@@ -331,7 +378,7 @@ Built in PRs #18-#20. The decisions below still apply to any new or reworked scr
 - **Rotation:** the Android app keeps portrait on phones and allows rotation on tablets (lock
   applied only when phone-sized). The installed web app drops its manifest `orientation:
   'portrait'` lock -- a manifest can't lock phones only -- so it may also rotate on phones.
-- **Implementation:** `useSizeClass()` in `App.jsx` is the single source of truth, mirrored onto
+- **Implementation:** `useSizeClass()` in `src/lib/ui.js` is the single source of truth, mirrored onto
   `<html data-size>`; layout CSS lives in `src/index.css` (not the `css` string, which Login and
   ClaimAccount don't render) and keys off `html[data-size=...]`. Existing DOM IDs stay stable;
   new elements (e.g. desktop nav) get new IDs documented in `chill-and-sip/TEST_IDS.md`.

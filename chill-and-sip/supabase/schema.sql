@@ -23,6 +23,7 @@ create table if not exists public.profiles (
   -- Set only by admin_adjust_gallons(), never by any other profile edit, so "time since last
   -- real transaction" stays meaningful for the app's client-side active/inactive computation.
   last_transaction_at timestamptz,
+  anonymized_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -31,6 +32,9 @@ alter table public.profiles alter column email drop not null;
 alter table public.profiles add column if not exists water_type text;
 alter table public.profiles add column if not exists claim_code text;
 alter table public.profiles add column if not exists last_transaction_at timestamptz;
+-- Set by admin_anonymize_customer(); starts the 3-year clock for purging the row and its
+-- transactions (see /delete-account/).
+alter table public.profiles add column if not exists anonymized_at timestamptz;
 alter table public.profiles drop constraint if exists profiles_water_type_check;
 alter table public.profiles add constraint profiles_water_type_check
   check (water_type is null or water_type in ('purified', 'remineralized', 'alkaline'));
@@ -66,6 +70,10 @@ before update on public.profiles
 for each row
 execute function public.set_profiles_updated_at();
 
+-- Only ever answers for the caller: is_admin(<someone else's id>) is false, so a signed-in
+-- customer can't probe which accounts are admins. Every caller in this file passes auth.uid().
+-- coalesce() matters: with no session, `uid = auth.uid()` is NULL, and `if not NULL` would
+-- skip the admin checks in the functions below instead of raising.
 create or replace function public.is_admin(uid uuid)
 returns boolean
 language sql
@@ -73,7 +81,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (
+  select coalesce(uid = auth.uid(), false) and exists (
     select 1 from public.profiles p
     where p.auth_user_id = uid and p.role = 'admin'
   );
@@ -133,7 +141,8 @@ create index if not exists gallon_transactions_user_profile_id_idx on public.gal
 create index if not exists gallon_transactions_actor_profile_id_idx on public.gallon_transactions (actor_profile_id);
 
 -- Atomically adjust a customer's gallon balance and record the transaction.
--- This is the ONLY supported way to change profiles.gallons. It:
+-- This is the ONLY supported way to change profiles.gallons (apart from the forfeit in
+-- admin_anonymize_customer(), which writes its own matching transaction row). It:
 --   1. Re-checks admin status server-side (does not trust the client/RLS alone).
 --   2. Locks the target row so concurrent admin actions cannot race each other.
 --   3. Rejects any change that would take the balance below zero.
@@ -227,6 +236,11 @@ begin
     raise exception 'This customer already has a linked login';
   end if;
 
+  -- An anonymized row must never be re-linked to a new login (see admin_anonymize_customer()).
+  if exists (select 1 from public.profiles where id = target_profile_id and anonymized_at is not null) then
+    raise exception 'This customer''s data was deleted';
+  end if;
+
   new_code := upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 8));
 
   update public.profiles
@@ -301,6 +315,78 @@ $$;
 
 revoke all on function public.claim_profile(integer, text) from public, anon;
 grant execute on function public.claim_profile(integer, text) to authenticated;
+
+-- Admin-only: honors an account-deletion request (/delete-account/). Deleting the profile row
+-- would cascade to its gallon_transactions, which are kept for 3 years, so instead this
+-- removes everything that identifies the customer -- name, email, claim code, water type --
+-- and deletes their login (auth.users row). The row and transactions stay, no longer linked
+-- to a person; anonymized_at marks when the 3-year purge clock started. Any remaining balance
+-- is forfeited, as /delete-account/ says, and recorded as a final ledger entry so the balance
+-- and transaction history still agree (the one change to gallons outside
+-- admin_adjust_gallons()). Admin profiles can't be anonymized (that includes the caller's own).
+create or replace function public.admin_anonymize_customer(target_profile_id uuid)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_profile_id uuid;
+  target public.profiles;
+  updated_profile public.profiles;
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Only admins can delete customer data';
+  end if;
+
+  select id into caller_profile_id from public.profiles where auth_user_id = auth.uid();
+
+  select * into target
+  from public.profiles
+  where id = target_profile_id
+  for update;
+
+  if not found then
+    raise exception 'Customer profile not found';
+  end if;
+
+  if target.role = 'admin' then
+    raise exception 'Admin accounts cannot be anonymized';
+  end if;
+
+  if target.anonymized_at is not null then
+    raise exception 'This customer''s data was already deleted';
+  end if;
+
+  if target.gallons > 0 then
+    insert into public.gallon_transactions (
+      user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note
+    ) values (
+      target.id, caller_profile_id, -target.gallons, target.gallons, 0, 'Balance forfeited: account deleted'
+    );
+  end if;
+
+  update public.profiles
+  set name = 'Deleted customer',
+      email = null,
+      auth_user_id = null,
+      claim_code = null,
+      water_type = null,
+      gallons = 0,
+      anonymized_at = now()
+  where id = target.id
+  returning * into updated_profile;
+
+  if target.auth_user_id is not null then
+    delete from auth.users where id = target.auth_user_id;
+  end if;
+
+  return updated_profile;
+end;
+$$;
+
+revoke all on function public.admin_anonymize_customer(uuid) from public, anon;
+grant execute on function public.admin_anonymize_customer(uuid) to authenticated;
 
 -- Lets a signed-in customer's client subscribe to their own balance/history changing
 -- (via Supabase Realtime `postgres_changes`) so an already-open app updates instantly

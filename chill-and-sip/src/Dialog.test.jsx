@@ -9,7 +9,8 @@ vi.mock("./lib/supabaseClient", () => {
   return { supabase: client, createEphemeralSupabaseClient: () => client };
 });
 
-const { useDialog, initialsFor } = await import("./App.jsx");
+const { useDialog } = await import("./lib/ui.js");
+const { initialsFor } = await import("./lib/format.js");
 
 // Minimal page with one bottom sheet wired the way MainApp wires its four sheets.
 function Harness({ onClose = () => {} }) {

@@ -9,7 +9,9 @@ vi.mock("./lib/supabaseClient", () => {
   return { supabase: client, createEphemeralSupabaseClient: () => client };
 });
 
-const { ClaimAccount, UnlinkedSessionRedirect, UserContext } = await import("./App.jsx");
+const { ClaimAccount } = await import("./screens/ClaimAccount.jsx");
+const { UnlinkedSessionRedirect } = await import("./screens/UnlinkedSessionRedirect.jsx");
+const { UserContext } = await import("./userContext.js");
 
 // Pure component tests with a fake UserContext (see Login.test.jsx); UserProvider.test.jsx
 // covers how unlinkedAuthEmail gets set by a real sign-in.
@@ -75,6 +77,38 @@ describe("ClaimAccount for a signed-in login with no linked profile (e.g. first 
     expect(await screen.findByLabelText("Your email")).toBeInTheDocument();
     expect(document.getElementById("vh2o-claim-signed-in-as")).not.toBeInTheDocument();
     expect(document.getElementById("vh2o-claim-switch-account-btn")).not.toBeInTheDocument();
+  });
+
+  it("signs up and claims in one step for someone not signed in", async () => {
+    const user = userEvent.setup();
+    const context = renderAt("/claim");
+
+    await user.type(await screen.findByLabelText("Customer ID"), "42");
+    await user.type(screen.getByLabelText("Claim code"), "abcd1234");
+    await user.type(screen.getByLabelText("Your email"), "dana@example.com");
+    await user.type(document.getElementById("vh2o-claim-password-input"), "secret1");
+    await user.type(document.getElementById("vh2o-claim-confirm-password-input"), "secret1");
+    await user.click(document.getElementById("vh2o-claim-submit"));
+
+    expect(context.claimProfile).toHaveBeenCalledWith("42", "abcd1234", "dana@example.com", "secret1", "secret1");
+    expect(await screen.findByText(/account linked/i)).toBeInTheDocument();
+  });
+
+  it("shows the confirm-your-email message instead of success when sign-up needs confirmation", async () => {
+    const user = userEvent.setup();
+    renderAt("/claim", {
+      claimProfile: vi.fn(async () => "Almost done: we sent a confirmation link to dana@example.com. Open it on this device, then enter your customer ID and claim code again."),
+    });
+
+    await user.type(await screen.findByLabelText("Customer ID"), "42");
+    await user.type(screen.getByLabelText("Claim code"), "abcd1234");
+    await user.type(screen.getByLabelText("Your email"), "dana@example.com");
+    await user.type(document.getElementById("vh2o-claim-password-input"), "secret1");
+    await user.type(document.getElementById("vh2o-claim-confirm-password-input"), "secret1");
+    await user.click(document.getElementById("vh2o-claim-submit"));
+
+    expect(await screen.findByText(/confirmation link to dana@example\.com/)).toBeInTheDocument();
+    expect(screen.queryByText(/account linked/i)).not.toBeInTheDocument();
   });
 });
 

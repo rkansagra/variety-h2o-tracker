@@ -10,7 +10,9 @@ vi.mock("./lib/supabaseClient", () => {
   return { supabase: client, createEphemeralSupabaseClient: () => client };
 });
 
-const { Login, ForgotPassword, UserContext } = await import("./App.jsx");
+const { Login } = await import("./screens/Login.jsx");
+const { ForgotPassword } = await import("./screens/ForgotPassword.jsx");
+const { UserContext } = await import("./userContext.js");
 
 // This is a pure component test: it supplies its own fake UserContext value instead of the
 // real UserProvider, so it exercises Login's own rendering/interaction logic (what it does
@@ -33,6 +35,7 @@ function renderLogin(contextOverrides = {}, initialEntry = "/login") {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/" element={<div id="test-home" />} />
         </Routes>
       </UserContext.Provider>
     </MemoryRouter>
@@ -89,6 +92,20 @@ describe("Login", () => {
     await user.click(document.getElementById("vh2o-login-google-btn"));
 
     expect(await screen.findByText("Unable to start Google sign-in")).toBeInTheDocument();
+  });
+
+  // Google sign-in (and emailed confirmation links) come back to /login with a session already
+  // in place, so there's no submit handler to navigate -- the page has to notice on its own.
+  it("leaves /login for the app once someone is signed in, e.g. back from Google", () => {
+    renderLogin({ currentUser: { id: 2, name: "Tester" } });
+
+    expect(document.getElementById("test-home")).toBeInTheDocument();
+  });
+
+  it("stays on /login for a password-recovery session so the new password can be set", () => {
+    renderLogin({ currentUser: { id: 2, name: "Tester" }, isPasswordRecovery: true });
+
+    expect(document.getElementById("vh2o-login-recovery-submit")).toBeInTheDocument();
   });
 
   it("hides password-reset fields behind a Forgot password? link", () => {

@@ -10,19 +10,25 @@
   native work. If that ever changes, recreate it with `npx cap add ios`.
 
 ## Big-picture architecture
-- App entry is `chill-and-sip/src/main.jsx`; it mounts `RewardsApp` from `chill-and-sip/src/App.jsx`.
+- App entry is `chill-and-sip/src/main.jsx`; it mounts `RewardsApp` from `chill-and-sip/src/App.jsx`,
+  which holds only the providers and routes.
 - `main.jsx` locks portrait only on phone-sized native screens (shortest side < 600dp) via
   `@capacitor/screen-orientation`, unlocks on tablets, and re-applies on app foreground
   (`CapacitorApp.addListener('appStateChange', ...)`).
-- Layout size classes come from `useSizeClass()` in `App.jsx` (phone: < 600px wide or < 500px
+- Layout size classes come from `useSizeClass()` in `src/lib/ui.js` (phone: < 600px wide or < 500px
   tall; tablet: 600-1023px; desktop: >= 1024px), mirrored onto `<html data-size>` for the CSS in
   `src/index.css`. Desktop swaps the logo banner and bottom tab bar for a top bar. Decide layout by
   window size, never by user-agent sniffing.
-- Almost all business/UI logic lives in one file: `chill-and-sip/src/App.jsx`.
-- `UserProvider` (same file) owns auth/session state, the customer/profile list, and transaction
-  notifications.
+- Code is split by role under `chill-and-sip/src/`: `screens/` (one per route, plus `screens/tabs/`
+  for MainApp's four tabs), `admin/`, `components/`, `menu/` (menu data), and `lib/` (pure helpers
+  and hooks, no Supabase calls). New code goes in the module for its role, not back into `App.jsx`.
+- `UserProvider.jsx` owns auth/session state, the customer/profile list, and transaction
+  notifications, and is the only place that reads or writes app data in Supabase (screens may
+  still check the auth session, as `ClaimAccount` does). Components read it with
+  `useUser()` from `userContext.js`.
 - Routing is minimal (`/`, `/login`, `/claim`) with `react-router-dom`; in-app navigation is tab
-  state (`activeTab`) not route-based.
+  state (`activeTab` in `screens/MainApp.jsx`) not route-based. State that must survive switching
+  tabs (e.g. the admin's customer search) lives in `MainApp`, since a tab unmounts when you leave it.
 
 ## Data flow and state model
 - Supabase (Postgres + Auth + RLS) is the single source of truth. There is no `localStorage`
@@ -46,8 +52,8 @@
 ## Project-specific conventions
 - Stable DOM IDs are required and documented in `chill-and-sip/TEST_IDS.md`; ID changes are test-breaking.
 - ID format is `vh2o-<screen>-<section>-<element>[-token]`; use stable tokens (e.g., `user.id`, slugified item names).
-- Styling pattern is inline style objects + a CSS string in `App.jsx` (`styles` and `css` constants), not component CSS modules.
-- Menu/category content is static config arrays in `App.jsx` (`MENU_CATEGORIES`, `CATEGORY_SIZE_TIERS`), not API-driven. Treat prices as real business data -- don't change them without confirming against the actual source (e.g. a POS catalog export) first.
+- Styling pattern is inline style objects + a CSS string in `src/styles.js` (`styles` and `css`), plus size-class layout rules in `src/index.css`, not component CSS modules.
+- Menu/category content is static config arrays in `src/menu/menuData.js` (`MENU_CATEGORIES`, `CATEGORY_SIZE_TIERS`), not API-driven. Treat prices as real business data -- don't change them without confirming against the actual source (e.g. a POS catalog export) first.
 - ESLint enforces no unused vars except names matching `^[A-Z_]` (`chill-and-sip/eslint.config.js`).
 
 ## Build, run, and quality workflow

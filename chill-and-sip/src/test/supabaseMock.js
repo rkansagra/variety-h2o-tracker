@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 // A minimal stand-in for the supabase-js client, shaped to match exactly the chain patterns
-// App.jsx actually calls (see grep results this was built from: .from().select().order().limit(),
+// the app actually calls (see grep results this was built from: .from().select().order().limit(),
 // .from().select().eq().maybeSingle(), .from().update()/.insert()...eq()/.is(), .rpc(), .auth.*,
 // .channel().on().subscribe()). It is NOT a general-purpose supabase-js mock -- extend
 // `createQueryBuilder` if a test needs a chain shape that isn't here yet.
@@ -25,7 +25,7 @@ function createQueryBuilder(state, table) {
     update: (...args) => (chain.push(["update", args]), builder),
     maybeSingle: (...args) => (chain.push(["maybeSingle", args]), builder),
     // Makes the builder itself awaitable, like the real supabase-js PostgrestFilterBuilder --
-    // App.jsx `await`s straight off the end of a chain without a separate execute() call.
+    // The app `await`s straight off the end of a chain without a separate execute() call.
     then(onFulfilled, onRejected) {
       const isSingle = chain.some(([name]) => name === "maybeSingle");
       const table_ = isSingle ? state.singleResponses : state.responses;
@@ -55,7 +55,7 @@ export function createSupabaseMock() {
     setSingle(table, data, error = null) {
       state.singleResponses[table] = { data, error };
     },
-    // Fires the same callback App.jsx registers via supabase.auth.onAuthStateChange, so a test
+    // Fires the same callback UserProvider registers via supabase.auth.onAuthStateChange, so a test
     // can simulate a login/logout event without going through a real redirect flow.
     emitAuthStateChange(event, session) {
       state.session = session;

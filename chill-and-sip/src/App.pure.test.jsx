@@ -1,28 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BiometryType } from "@aparajita/capacitor-biometric-auth";
 import { Capacitor } from "@capacitor/core";
-import { createSupabaseMock } from "./test/supabaseMock.js";
-
-// App.jsx imports ./lib/supabaseClient at module scope, which throws immediately if
-// VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY aren't set -- mock it here even though none of
-// these particular tests touch Supabase, so this file runs the same with or without a local
-// .env and never risks a real network call.
-vi.mock("./lib/supabaseClient", () => {
-  const { client } = createSupabaseMock();
-  return { supabase: client, createEphemeralSupabaseClient: () => client };
-});
-
-const {
-  mapProfileToUser,
-  isActiveCustomer,
-  mapTransactionToNotification,
-  capNotificationsPerUser,
-  slugify,
-  getTier,
-  biometryLabel,
-  authRedirectUrl,
-  buttonProps,
-} = await import("./App.jsx");
+// None of these modules import the Supabase client, so no mock is needed here.
+import {
+  mapProfileToUser, isActiveCustomer, mapTransactionToNotification, capNotificationsPerUser,
+} from "./lib/customers.js";
+import { slugify } from "./lib/format.js";
+import { getTier } from "./lib/tiers.js";
+import { biometryLabel } from "./lib/biometrics.js";
+import { authRedirectUrl } from "./lib/urls.js";
+import { buttonProps } from "./lib/ui.js";
 
 describe("buttonProps", () => {
   it("makes an element focusable and announced as a button", () => {
@@ -80,6 +67,7 @@ describe("mapProfileToUser", () => {
       water_type: "purified",
       last_transaction_at: "2026-01-01T00:00:00Z",
       claim_code: "ABC123",
+      anonymized_at: "2026-02-01T00:00:00Z",
     };
 
     expect(mapProfileToUser(profile)).toEqual({
@@ -95,6 +83,7 @@ describe("mapProfileToUser", () => {
       waterType: "purified",
       lastTransactionAt: "2026-01-01T00:00:00Z",
       hasClaimCode: true,
+      anonymizedAt: "2026-02-01T00:00:00Z",
     });
   });
 

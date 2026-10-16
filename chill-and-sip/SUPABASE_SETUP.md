@@ -115,7 +115,7 @@ see references to it in old commits/PRs -- the current, standing plan going forw
   entirely (Twilio A2P 10DLC registration, per-message fees, etc. -- see prior session's cost
   research if you want the numbers) while still reaching the customer.
 - **OAuth/social login is additive to email; Google is implemented app-side.** `loginWithGoogle()`
-  in `App.jsx` calls `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo:
+  in `src/UserProvider.jsx` calls `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo:
   authRedirectUrl() } })`, and the Login page has a "Continue with Google" button that triggers it.
   The button is **web/PWA only** -- it's hidden in the Capacitor native app, because Google rejects
   OAuth inside embedded webviews (`Error 403: disallowed_useragent`).
@@ -165,7 +165,7 @@ see references to it in old commits/PRs -- the current, standing plan going forw
     (Capacitor 7-compatible), **not** `capacitor-native-biometric` as originally sketched here --
     that package still pins `@capacitor/core@^3.4.3` (unmaintained for over a year), which would
     have installed a second, incompatible copy of Capacitor's core alongside this project's v7.
-  - `UserProvider` (`App.jsx`) owns all of it: `biometricAvailable`/`biometryType` (from
+  - `UserProvider` (`src/UserProvider.jsx`) owns all of it: `biometricAvailable`/`biometryType` (from
     `BiometricAuth.checkBiometry()`, native platforms only -- always false/none on web, so this
     never shows up in the PWA), `biometricLockEnabled` (this user's own opt-in, persisted in
     `localStorage` keyed by `auth_user_id` since more than one account could sign into the same

@@ -8,7 +8,8 @@ vi.mock("./lib/supabaseClient", async () => {
   return { supabase: sharedMock.client, createEphemeralSupabaseClient: () => sharedMock.client };
 });
 
-const { UserProvider, useUser } = await import("./App.jsx");
+const { UserProvider } = await import("./UserProvider.jsx");
+const { useUser } = await import("./userContext.js");
 
 const { state, auth } = sharedMock;
 
@@ -135,6 +136,102 @@ describe("UserProvider / claimProfile()", () => {
 
     expect(result).toBe(true);
     expect(sharedMock.client.rpc).toHaveBeenCalledWith("claim_profile", { p_legacy_id: 2, p_claim_code: "ABCD1234" });
+  });
+});
+
+// Admin actions go through SECURITY DEFINER RPCs that re-check admin status server-side; these
+// pin down exactly which RPC each one calls, with which profile, and what the UI gets back.
+describe("UserProvider / admin actions", () => {
+  const ADMIN = { id: "p-admin", auth_user_id: "auth-admin", email: "admin@example.com", role: "admin", gallons: 0, name: "Admin", legacy_id: 1 };
+  const CUSTOMER = { id: "p-42", auth_user_id: null, email: null, role: "user", gallons: 100, name: "Dana", legacy_id: 42 };
+
+  async function renderAsAdmin() {
+    state.user = { id: "auth-admin", email: "admin@example.com" };
+    state.session = { user: state.user };
+    state.setRows("profiles", [ADMIN, CUSTOMER]);
+    state.setRows("gallon_transactions", []);
+    const { getCtx } = renderProvider();
+    await waitFor(() => expect(screen.getByTestId("current-user")).toHaveTextContent("admin@example.com"));
+    return getCtx;
+  }
+
+  it("credits and debits through admin_adjust_gallons with the customer's profile id", async () => {
+    state.rpcResults.admin_adjust_gallons = (args) => ({ data: { gallons: 100 + args.delta }, error: null });
+    const getCtx = await renderAsAdmin();
+
+    let credit;
+    let debit;
+    await act(async () => {
+      credit = await getCtx().adjustGallons(42, 25, "5 gal jug");
+      debit = await getCtx().adjustGallons(42, -10);
+    });
+
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("admin_adjust_gallons", { target_profile_id: "p-42", delta: 25, note: "5 gal jug" });
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("admin_adjust_gallons", { target_profile_id: "p-42", delta: -10, note: null });
+    expect(credit).toEqual({ ok: true, newBalance: 125 });
+    expect(debit).toEqual({ ok: true, newBalance: 90 });
+  });
+
+  it("passes the server's refusal through (e.g. a debit below zero)", async () => {
+    state.rpcResults.admin_adjust_gallons = { data: null, error: { message: "Insufficient balance: customer has 100 gallons, cannot debit 500" } };
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    await act(async () => {
+      result = await getCtx().adjustGallons(42, -500);
+    });
+
+    expect(result).toEqual({ ok: false, message: "Insufficient balance: customer has 100 gallons, cannot debit 500" });
+  });
+
+  it("doesn't call the server for a customer it doesn't know", async () => {
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    await act(async () => {
+      result = await getCtx().adjustGallons(999, 5);
+    });
+
+    expect(result).toEqual({ ok: false, message: "Customer not found" });
+    expect(sharedMock.client.rpc).not.toHaveBeenCalledWith("admin_adjust_gallons", expect.anything());
+  });
+
+  it("generates a claim code through admin_generate_claim_code", async () => {
+    state.rpcResults.admin_generate_claim_code = { data: "ABCD1234", error: null };
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    await act(async () => {
+      result = await getCtx().generateClaimCode("p-42");
+    });
+
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("admin_generate_claim_code", { target_profile_id: "p-42" });
+    expect(result).toEqual({ ok: true, code: "ABCD1234" });
+  });
+
+  it("deletes a customer's personal data through admin_anonymize_customer", async () => {
+    state.rpcResults.admin_anonymize_customer = { data: {}, error: null };
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    await act(async () => {
+      result = await getCtx().anonymizeCustomer("p-42");
+    });
+
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("admin_anonymize_customer", { target_profile_id: "p-42" });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("reports a refused anonymize (e.g. an admin account)", async () => {
+    state.rpcResults.admin_anonymize_customer = { data: null, error: { message: "Admin accounts cannot be anonymized" } };
+    const getCtx = await renderAsAdmin();
+
+    let result;
+    await act(async () => {
+      result = await getCtx().anonymizeCustomer("p-admin");
+    });
+
+    expect(result).toEqual({ ok: false, message: "Admin accounts cannot be anonymized" });
   });
 });
 

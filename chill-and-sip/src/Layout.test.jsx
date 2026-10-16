@@ -9,7 +9,9 @@ vi.mock("./lib/supabaseClient", () => {
   return { supabase: client, createEphemeralSupabaseClient: () => client };
 });
 
-const { sizeClassFor, useSizeClass, MainApp, UserContext } = await import("./App.jsx");
+const { sizeClassFor, useSizeClass } = await import("./lib/ui.js");
+const { MainApp } = await import("./screens/MainApp.jsx");
+const { UserContext } = await import("./userContext.js");
 
 describe("sizeClassFor", () => {
   it("splits by width at 600px and 1024px", () => {

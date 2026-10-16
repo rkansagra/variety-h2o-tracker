@@ -145,6 +145,13 @@ Dynamic customer rows:
 - `vh2o-admin-user-note-input-<userId>`
 - `vh2o-admin-user-credit-btn-<userId>`
 - `vh2o-admin-user-debit-btn-<userId>`
+- `vh2o-admin-user-data-deleted-<userId>` (pill shown once a customer's data was deleted)
+- `vh2o-admin-user-delete-data-btn-<userId>`
+- `vh2o-admin-user-delete-data-confirm-<userId>`
+- `vh2o-admin-user-delete-data-input-<userId>`
+- `vh2o-admin-user-delete-data-cancel-btn-<userId>`
+- `vh2o-admin-user-delete-data-confirm-btn-<userId>`
+- `vh2o-admin-user-delete-data-error-<userId>`
 - `vh2o-admin-user-history-btn-<userId>`
 
 Credit/debit confirmation sheet:

@@ -29,7 +29,7 @@ vi.mock("@capacitor/app", () => ({
 }));
 
 // Mirrors the real package's BiometryType enum values (see node_modules/@aparajita/
-// capacitor-biometric-auth/dist/esm/definitions.d.ts) so biometryLabel()'s switch in App.jsx
+// capacitor-biometric-auth/dist/esm/definitions.d.ts) so biometryLabel()'s switch in lib/biometrics.js
 // behaves identically to production even though the plugin itself is mocked.
 export const BiometryType = {
   none: 0,

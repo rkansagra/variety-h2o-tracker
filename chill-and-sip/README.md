@@ -19,14 +19,20 @@ The active product code lives under `chill-and-sip/`.
 This is the real application codebase.
 
 - `src/main.jsx` — app bootstrap. Locks portrait orientation on mobile and mounts the main app.
-- `src/App.jsx` — this is the main business logic and UI file. It contains:
-  - auth/session management
-  - user/profile loading from Supabase
-  - gallon adjustments and transaction history
-  - admin flow and claim-code flow
-  - menu/location/settings screens
-  - notification handling
-- `src/lib/supabaseClient.js` — Supabase client setup and auth configuration
+- `src/App.jsx` — providers and routes only.
+- `src/UserProvider.jsx` — auth/session, loading profiles and transactions from Supabase,
+  gallon adjustments, claim codes, data deletion, and biometric lock. Read it with `useUser()`
+  from `src/userContext.js`.
+- `src/screens/` — one component per route (`Login`, `ForgotPassword`, `ClaimAccount`,
+  `MainApp`), plus `BiometricLockScreen` and `UnlinkedSessionRedirect`.
+- `src/screens/tabs/` — MainApp's four tabs: Home (`TrackerTab`), `MenuTab`, `LocationTab`,
+  `SettingsTab`.
+- `src/admin/` — the admin's customer panel and customer card.
+- `src/menu/menuData.js` — menu categories and prices.
+- `src/lib/` — pure helpers and hooks (customer mapping/filtering, layout hooks, formatting,
+  tiers, biometrics labels, URLs), plus `supabaseClient.js` (Supabase client setup).
+- `src/components/` — small shared components.
+- `src/styles.js` — the shared inline style objects and CSS string.
 - `src/assets/` — static images and branding assets
 - `src/index.css` — base styling
 - `android/` — native Capacitor wrapper project (there is no `ios/`; iOS ships as a PWA)
@@ -35,7 +41,8 @@ This is the real application codebase.
 - `dist/` — production build output
 
 ### Important architectural note
-Nearly all of the app's real logic lives in `chill-and-sip/src/App.jsx`. If you are trying to understand behavior, start there before looking elsewhere.
+Everything that talks to Supabase for app data lives in `src/UserProvider.jsx`; screens and tabs
+call its actions through `useUser()`. Start there to understand behavior, then the screen involved.
 
 ## Data flow and business logic
 
@@ -45,7 +52,7 @@ The app uses Supabase as the main source of truth.
 - User and customer data is stored in the `profiles` table.
 - Gallon changes are not done ad hoc in the client; they go through the `admin_adjust_gallons(...)` Postgres function.
 - Transaction rows are stored in `gallon_transactions` and shown in history screens.
-- `UserProvider` in `App.jsx` is the central state holder for:
+- `UserProvider` (`src/UserProvider.jsx`) is the central state holder for:
   - current user/session
   - user list
   - notifications
@@ -54,7 +61,7 @@ The app uses Supabase as the main source of truth.
 
 When an admin changes a customer balance, the flow is roughly:
 
-1. UI calls `adjustGallons(...)` in `App.jsx`
+1. The admin panel calls `adjustGallons(...)` from `UserProvider`
 2. Client invokes Supabase RPC `admin_adjust_gallons`
 3. Postgres validates admin privilege and balance rules
 4. Balance and transaction record are updated atomically
@@ -92,17 +99,15 @@ npm run test:coverage
 ## Product conventions
 
 - App entry is `src/main.jsx`
-- Business logic is concentrated in `src/App.jsx`
+- Supabase reads and writes are concentrated in `src/UserProvider.jsx`
 - Stable DOM IDs are documented in `TEST_IDS.md`
 - Native build logic belongs in `android/` and should not be hand-edited unless using Capacitor sync/build steps
 - The app is designed around React state, with Supabase as the persistent backend
 
 ## Automated tests
 
-`src/App.jsx` exports its pure helper functions (`mapProfileToUser`, `isActiveCustomer`,
-`slugify`, `getTier`, etc.), `UserContext`/`UserProvider`/`useUser`, and the `Login`/`ClaimAccount`
-components specifically so they're testable in isolation -- Vite's Fast Refresh lint rule is
-disabled for this one file in `eslint.config.js` to allow it (see the comment there).
+Tests import what they need straight from its module: pure helpers from `src/lib/`,
+`UserProvider` and `useUser`/`UserContext`, and screens such as `Login` and `ClaimAccount`.
 
 - `src/App.pure.test.jsx` — pure logic: active/inactive window math, notification capping,
   profile/transaction mapping, reward tiers.
@@ -119,7 +124,7 @@ disabled for this one file in `eslint.config.js` to allow it (see the comment th
   `@aparajita/capacitor-biometric-auth`.
 
 None of these hit a real Supabase project -- `src/test/supabaseMock.js` is a hand-built fake
-covering just the `.from()/.rpc()/.auth.*/.channel()` chain shapes App.jsx actually calls; extend
+covering just the `.from()/.rpc()/.auth.*/.channel()` chain shapes the app actually calls; extend
 it if a new test needs a chain shape it doesn't support yet. `src/test/setup.js` also globally
 mocks `@capacitor/core`, `@capacitor/app`, and `@aparajita/capacitor-biometric-auth` to
 "web platform, no biometry" by default for every test file (partly because these are native-only
@@ -136,7 +141,7 @@ later.
 
 ## When to read what
 
-- Need to understand the app flow? Start with `src/App.jsx`
+- Need to understand the app flow? Start with `src/UserProvider.jsx`, then the screen in `src/screens/`
 - Need to set up local environment? Read `SUPABASE_SETUP.md`
 - Need to target UI selectors in automation? Read `TEST_IDS.md`
 - Need to build or lint? Use the package scripts above

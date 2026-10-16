@@ -14,7 +14,8 @@ vi.mock("./lib/supabaseClient", async () => {
   return { supabase: sharedMock.client, createEphemeralSupabaseClient: () => sharedMock.client };
 });
 
-const { UserProvider, useUser } = await import("./App.jsx");
+const { UserProvider } = await import("./UserProvider.jsx");
+const { useUser } = await import("./userContext.js");
 const { state, auth } = sharedMock;
 
 function Probe({ onReady }) {
