@@ -1,154 +1,157 @@
-# Variety H2O app
+# Variety H2O + Ice Cream
 
-This repo contains the web/mobile app for Variety H2O, built with React, Vite, and Capacitor.
+A prepaid-water ledger for a family-owned water and ice cream shop in Tucson, Arizona. Customers
+buy gallons of purified water in advance and fill their jugs over time; the app replaced the paper
+index card that tracked each customer's balance.
 
-## What the app does
+**Live:** [varietyh2o.com](https://varietyh2o.com) · Android on
+[Google Play](https://play.google.com/store/apps/details?id=com.varietyh2o.app) · iOS as an
+installable web app
 
-- Customer-facing tracker and account status
-- Admin dashboard for managing customer gallons and transactions
-- Menu and location information
-- Passwordless sign-in: customers get an emailed code, and their login links to the record staff
-  saved that email on
-- Supabase-backed transaction history and auth
-- Native Android wrapper via Capacitor; iOS users install the PWA from Safari
+<table>
+  <tr>
+    <td><img src="docs/screenshots/phone-home.png" alt="A customer's balance and recent history on a phone" width="240"></td>
+    <td><img src="docs/screenshots/phone-sign-in.png" alt="Signing in with an emailed 6-digit code" width="240"></td>
+    <td><img src="docs/screenshots/phone-menu.png" alt="The ice cream menu on a phone" width="240"></td>
+  </tr>
+  <tr>
+    <td align="center">Customer balance and history</td>
+    <td align="center">Passwordless sign-in</td>
+    <td align="center">Menu</td>
+  </tr>
+</table>
 
-## Directory breakdown
+<img src="docs/screenshots/desktop-admin.png" alt="The admin customer panel on desktop: server-side search with filters, and one customer's card with Bought/Filled buttons">
 
-- `src/main.jsx` — app bootstrap. Locks portrait on phone-sized native screens and mounts the main app.
-- `src/App.jsx` — providers and routes only.
-- `src/UserProvider.jsx` — auth/session, loading profiles and transactions from Supabase,
-  gallon adjustments, adding customers and linking logins, data deletion, and biometric lock. Read it with `useUser()`
-  from `src/userContext.js`.
-- `src/screens/` — one component per route (`Login`, `ForgotPassword`, `NoAccount`,
-  `MainApp`), plus `BiometricLockScreen` and `UnlinkedSessionRedirect`.
-- `src/screens/tabs/` — MainApp's four tabs: Home (`TrackerTab`), `MenuTab`, `LocationTab`,
-  `SettingsTab`.
-- `src/admin/` — the admin's customer panel and customer card.
-- `src/menu/menuData.js` — menu categories and prices.
-- `src/lib/` — pure helpers and hooks (customer mapping/filtering, layout hooks, formatting,
-  biometrics labels, store info, URLs), plus `supabaseClient.js` (Supabase client setup).
-- `src/components/` — small shared components.
-- `src/styles.js` — the shared inline style objects and CSS string.
-- `src/assets/` — static images and branding assets
-- `src/index.css` — base styling
-- `android/` — native Capacitor wrapper project (there is no `ios/`; iOS ships as a PWA)
-- `supabase/schema.sql` — database schema and admin-only transaction functions
-- `public/` — public static assets for the web build
-- `dist/` — production build output
+*The admin view on desktop. Screenshots use made-up customers.*
 
-### Important architectural note
-Everything that talks to Supabase for app data lives in `src/UserProvider.jsx`; screens and tabs
-call its actions through `useUser()`. Start there to understand behavior, then the screen involved.
+## What it does
 
-## Data flow and business logic
+- **Customers** see their gallon balance and recent fills and purchases, updated live when staff
+  ring them up. They sign in with a 6-digit code sent to their email; there are no passwords.
+- **Staff** look up a customer, record "Bought" or "Filled", add new customers, and handle
+  account-deletion requests. An admin-only assistant answers plain-language questions about the
+  ledger ("Who hasn't come in for 60 days?").
+- **Everyone** can browse the menu and find the store.
+- One codebase serves phones, tablets, and desktops, on the web, as an Android app, and as an
+  iOS home-screen app.
 
-The app uses Supabase as the main source of truth.
+About 400 customer records were migrated from the shop's existing list; customers link their own
+login on their next visit.
 
-- Authentication is Supabase Auth: emailed one-time codes (and Google) for customers, email +
-  password for staff.
-- User and customer data is stored in the `profiles` table.
-- Gallon changes are not done ad hoc in the client; they go through the `admin_adjust_gallons(...)` Postgres function.
-- Transaction rows are stored in `gallon_transactions` and shown in history screens.
-- `UserProvider` (`src/UserProvider.jsx`) is the central state holder for:
-  - current user/session
-  - the signed-in user's own profile and recent history (the admin's customer list is searched
-    on the server, one query at a time)
-  - notifications
-  - app loading state
-  - password recovery flow
+## Architecture
 
-When an admin changes a customer balance, the flow is roughly:
+```mermaid
+flowchart LR
+  subgraph clients[Clients]
+    web["Web app and iOS PWA<br/>React + Vite"]
+    android["Android app<br/>Capacitor"]
+  end
+  netlify["Netlify<br/>static hosting"]
+  subgraph supabase[Supabase]
+    auth["Auth<br/>email codes, Google,<br/>staff password"]
+    db[("Postgres<br/>RLS + column grants<br/>ledger functions")]
+    realtime["Realtime"]
+    assistant["Edge Function<br/>admin-assistant"]
+  end
+  resend["Resend<br/>SMTP"]
+  claude["Claude API"]
 
-1. The admin panel calls `adjustGallons(...)` from `UserProvider`
-2. Client invokes Supabase RPC `admin_adjust_gallons`
-3. Postgres validates admin privilege and balance rules
-4. Balance and transaction record are updated atomically
-5. The app refreshes state, and the customer's open app updates through Supabase Realtime
+  netlify -->|"serves"| web
+  web --> auth
+  android --> auth
+  web -->|"RPC + REST"| db
+  android -->|"RPC + REST"| db
+  db --> realtime
+  realtime -->|"balance updates"| web
+  auth -->|"sign-in codes"| resend
+  web -->|"admin questions"| assistant
+  assistant -->|"read-only functions,<br/>as the caller"| db
+  assistant --> claude
+```
 
-## Quick start
+There's no application server. The browser talks to Supabase directly, so the rules that matter
+live in the database: row-level security, column-level grants, and a handful of `SECURITY
+DEFINER` functions that check who's calling. The only server-side code is one Edge Function for
+the assistant. Netlify serves the static build; the Android app wraps the same build with
+Capacitor.
 
-From the repo root:
+## Design decisions
+
+### Balances change only through the ledger
+A balance is money the customer has already paid, so no client can set it. Signed-in users,
+including the admin, can't update `gallons` at all. Column grants allow writing only
+`water_type`. Every change goes through one function, `admin_adjust_gallons()`. It re-checks that
+the caller is an admin, locks the customer's row so two registers can't race, refuses to go below
+zero, and writes the balance and its ledger row in the same transaction. The ledger and the
+balance can't drift apart. `profile_writes.test.sql` tries each forbidden write and expects the
+database to refuse it.
+
+### Passwordless sign-up that links accounts safely
+Staff create the customer record with the customer's email. When the customer later signs in
+with a code sent to that address, `link_my_profile()` links the login to the record. It does
+that only when the email is confirmed **and** the login has no password. Code and Google
+sign-ins never set one. A password sign-up made straight through the Auth API might be
+auto-confirmed, or planted before the real customer first signs in. Either way, someone else
+would know its password. The browser never chooses which record to link.
+`signup.test.sql` covers each refusal.
+
+### No browser holds the customer list
+Searching happens in the database (`admin_search_customers()`): matching, filtering, sorting, and
+a 3-character minimum, with LIKE wildcards escaped. The admin's browser only ever sees the
+customers a search matched. Customers load only their own record and their 5 latest entries.
+
+### A read-only AI assistant
+"Ask the ledger" runs Claude in a Supabase Edge Function. The API key never reaches the browser.
+The model can call only a fixed allowlist of `assistant_*` Postgres functions. They're `STABLE`,
+so Postgres rejects any write inside them. They run as the admin's own login, under RLS, never
+the service-role key. They never return email addresses. Every answer lists the lookups it used,
+so the owners can check where a number came from. `assistant_tools.test.sql` verifies the
+functions are read-only and admin-only.
+
+### Layout by window size, not device
+Phone, tablet, and desktop layouts come from the actual window size (`useSizeClass()`), not
+user-agent sniffing. A resized browser window or an iPad in split view gets the right layout.
+Desktop swaps the bottom tab bar for a top bar.
+
+<p>
+  <img src="docs/screenshots/tablet-menu.png" alt="The menu on a tablet" width="340">
+  <img src="docs/screenshots/desktop-home.png" alt="A customer's balance and history on desktop" width="480">
+</p>
+
+## Testing
+
+- **141 unit and component tests** (Vitest + React Testing Library) against a hand-built fake of
+  the Supabase client, so they never touch real data.
+- **4 SQL test suites** for what the client can't check: RLS, grants, and the security-sensitive
+  functions. Each seeds synthetic data and rolls back.
+- **CI on every pull request** (GitHub Actions) runs lint, unit tests, and the build. It also
+  builds the database from `schema.sql` twice on plain Postgres, proving it re-runs, then runs
+  every SQL suite.
+- **Every pull request gets a Netlify Deploy Preview.** Production deploys are manual.
+- **Database migrations are checked against live data** inside a transaction that rolls back:
+  rehearsed beforehand for larger changes, and verified right after applying for every change.
+
+## Tech stack
+
+React 19, Vite, React Router · Supabase (Postgres, Auth, Realtime, Edge Functions) · Capacitor 8
+(Android) · Netlify · Resend · Claude API · Vitest, React Testing Library · GitHub Actions
+
+## How it was built
+
+Built in 2026 by Rasesh Kansagra for the family business, working with Claude Code as an AI pair
+programmer. Every decision involving customer data, money, or production was the owner's call.
+[ROADMAP.md](ROADMAP.md) records each decision and why, including the ones that were tried and
+reversed, from replacing the paper cards to the architecture audit that shaped the current design.
+
+## For developers
 
 ```bash
 npm install
-cp .env.example .env
-```
-
-Then set:
-
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-
-See `SUPABASE_SETUP.md` for the complete database and auth setup steps.
-
-## Common developer commands
-
-```bash
+cp .env.example .env   # set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 npm run dev
-npm run build
-npm run lint
-npm run preview
-npm run test           # unit/component tests (Vitest + React Testing Library), no backend required
-npm run test:watch
-npm run test:coverage
 ```
 
-## Product conventions
-
-- App entry is `src/main.jsx`
-- Supabase reads and writes are concentrated in `src/UserProvider.jsx`
-- Stable DOM IDs are documented in `TEST_IDS.md`
-- Native build logic belongs in `android/` and should not be hand-edited unless using Capacitor sync/build steps
-- The app is designed around React state, with Supabase as the persistent backend
-
-## Automated tests
-
-Tests import what they need straight from its module: pure helpers from `src/lib/`,
-`UserProvider` and `useUser`/`UserContext`, and screens such as `Login` and `NoAccount`.
-
-- `src/App.pure.test.jsx` — pure logic: active/inactive window math, notification capping,
-  profile/transaction mapping.
-- `src/Login.test.jsx` — component-level: renders `<Login />` with a hand-fed fake
-  `UserContext` value (not the real `UserProvider`), so it tests Login's own rendering/event
-  logic without touching Supabase at all.
-- `src/UserProvider.test.jsx` — integration-level: renders the real `UserProvider` against a
-  mocked Supabase client (`src/test/supabaseMock.js`) to exercise `login()`'s actual
-  profile-linking logic, including the `authLinkError` path an OAuth sign-in with no matching
-  `profiles` row takes.
-- `src/BiometricAuth.test.jsx` — integration-level: the biometric lock preference/gate logic
-  (`enableBiometricLock`/`unlockWithBiometrics`/`disableBiometricLock`, and locking on sign-in
-  when the preference was already on) against mocked `@capacitor/core` and
-  `@aparajita/capacitor-biometric-auth`.
-
-None of these hit a real Supabase project -- `src/test/supabaseMock.js` is a hand-built fake
-covering just the `.from()/.rpc()/.auth.*/.channel()` chain shapes the app actually calls; extend
-it if a new test needs a chain shape it doesn't support yet. `src/test/setup.js` also globally
-mocks `@capacitor/core`, `@capacitor/app`, and `@aparajita/capacitor-biometric-auth` to
-"web platform, no biometry" by default for every test file (partly because these are native-only
-plugins with nothing meaningful to do in jsdom, partly because the biometric-auth package's ESM
-build doesn't resolve under Vitest at all -- see the comment there). There is currently no E2E
-suite against a running app/browser -- `TEST_IDS.md`'s selectors exist for that if it's added
-later.
-
-Vitest also runs `supabase/functions/admin-assistant/assistant.test.ts`, the assistant's tool
-loop with a fake Anthropic client.
-
-**Database tests** (`supabase/tests/*.test.sql`) check the database side, such as that the
-assistant's tools are read-only and admin-only. Each one seeds its own data and rolls back. CI's
-`database` job runs them on plain Postgres after `supabase/tests/supabase_stub.sql` (the Supabase
-roles, `auth.uid()`, and so on) and `schema.sql`, twice, to prove it re-runs. You can also paste
-one into the Supabase SQL editor; it changes nothing.
-
-## Documentation map
-
-- `SUPABASE_SETUP.md` — required auth and database setup for a developer environment
-- `TEST_IDS.md` — stable selector IDs used by automation and QA
-- `PUSH_NOTIFICATIONS_GUIDE.md` and `SCALING_AND_DATABASE_GUIDE.md` were historical/partial drafts and were removed because they were stale or speculative rather than current project guidance
-
-## When to read what
-
-- Need to understand the app flow? Start with `src/UserProvider.jsx`, then the screen in `src/screens/`
-- Need to set up local environment? Read `SUPABASE_SETUP.md`
-- Need to target UI selectors in automation? Read `TEST_IDS.md`
-- Need to build or lint? Use the package scripts above
-- Need to run or extend tests? Read "Automated tests" above, then the test files themselves
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): code map, data flow, tests, and conventions.
+- [SUPABASE_SETUP.md](SUPABASE_SETUP.md): database, auth, and email setup.
+- [ROADMAP.md](ROADMAP.md): what's next and what's been decided.

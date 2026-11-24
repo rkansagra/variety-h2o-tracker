@@ -14,9 +14,10 @@ would change sits above the database and goes back to the 2026-04 starter templa
 `localStorage` "rewards app" with a dark neon theme): how data is loaded, how identity works, the
 vocabulary, and the look. Items are worked one PR at a time.
 
-**Working order** (set 2026-11-24): A (done), G, L, B, C, D, E, I, J, H, K, F. Sign-up comes
-first because almost no customer has a login yet: of about 400 customer records, only the Play
-reviewer's demo account is linked to one.
+**Working order** (set 2026-11-24): A, G, L, B (all done and live), and K (done early, for
+interviews); then C, D, E, I, J, H, F.
+Sign-up went first because almost no customer had a login yet: of about 400 customer records,
+only the Play reviewer's demo account was linked to one.
 
 ### A. Remove starter leftovers and dead code -- done (PRs #39, #40)
 - Vite starter CSS still in `src/index.css`: a second `:root` palette (purple `--accent`), 56px
@@ -64,13 +65,14 @@ used any of them, so nothing needs migrating.
   record per login, never an admin record), and Vitest for code sign-in and the unknown-email
   screen.
 
-### L. Content fixes the owners approved -- built (PR #41), wording awaits owner sign-off
-Decided 2026-11-24. Built in PR #41: the badge and the balance-based tier code are removed (a
-rewards program would redesign tiers anyway), and the Alkaline Water description is drafted.
+### L. Content fixes the owners approved -- live (PR #41)
+Decided 2026-11-24 and live since that day's deploy. The badge and the balance-based tier code are
+removed (a rewards program would redesign tiers anyway). The owners approved facts-only wording
+for both Alkaline Water and Remineralized Water, which made a softer nutrition claim.
 - Hide the reward-tier badge until there's a rewards program (see Later). It's based on the
   current balance, so it drops every time a customer fills up, and it unlocks nothing.
 - The Alkaline Water description sticks to facts (what it is and how it's made) with no
-  health-benefit claims. The new wording is drafted for the owners to approve before it ships.
+  health-benefit claims.
 
 ### B. Load admin data from the server, one customer at a time -- live (PR #41)
 Built in PR #41, live since 2026-11-24: `admin_search_customers`, `admin_get_customer`, and `admin_customer_summary`
@@ -118,10 +120,12 @@ customer names or emails.
 Show the customer number as a card with a QR code that staff scan to open the account. History
 groups entries by day and shows the staff note.
 
-### K. Showcase README
-The public mirror's README is the first thing a reviewer reads. Rewrite it around the product
-and the design decisions: what problem it solves, an architecture diagram, screenshots per size
-class, how the ledger stays tamper-proof, how the assistant stays read-only, and how it's tested.
+### K. Showcase README -- done (PR #43)
+The public mirror's README is the first thing a reviewer reads, so it's now about the product and
+the design decisions: what problem it solves, a Mermaid architecture diagram, screenshots per size
+class (made-up data, captured against a mocked Supabase), how the ledger stays tamper-proof, how
+sign-up linking and the assistant stay safe, and how it's tested. The developer detail moved to
+`docs/DEVELOPMENT.md`. Retake the screenshots after the visual refresh (item I).
 
 ### F. Counter-first admin screen
 The most frequent task is find a customer, enter gallons, choose Filled or Bought. Make that the
@@ -139,8 +143,8 @@ Owners type plain-language questions about customers, balances, and visits (e.g.
 in for 60 days?", "How much prepaid balance is outstanding?", "What were last week's busiest
 days?") and get answers grounded in the live data. **Live** (2026-10-16): the database functions,
 the `admin-assistant` Edge Function, and the API key are in production, and it was tried on a
-Deploy Preview. The admin panel reaches varietyh2o.com with the next site deploy. Still to do: the
-eval suite.
+Deploy Preview. The admin panel has been on varietyh2o.com since the 2026-11-24 deploy. Still to
+do: the eval suite.
 
 **Architecture constraints:**
 - Runs in a Supabase Edge Function. The Anthropic API key lives only in Edge Function secrets,
@@ -207,8 +211,11 @@ review and send manually -- never auto-sent.
 - **Square catalog sync** for menu prices, after item E.
 
 ## Open operational tasks
-- **Android 1.1** (`versionCode 4`): ships the plugin removal from PR #39 and the new sign-in from
-  item G. Update Play's reviewer sign-in details with it.
+- **Android 1.1** (`versionCode 4`): the Play app still bundles the 1.0 (pre-PR #41) web app.
+  Customer balances and history work, but its sign-in is password-only (no emailed codes), and its
+  admin "Register user" and claim-code buttons now fail against the database. 1.1 ships emailed-code
+  sign-in, Add customer, server-side admin search, and the plugin removal from PR #39. Update Play's
+  reviewer sign-in details with it.
 
 ## Decided against
 - **Apple Sign-In:** only required by App Store Review Guideline 4.8, and iOS ships as an
@@ -518,12 +525,18 @@ Play, WordPress.com) is noted where it happened.
     logins link only through an admin creating the profile or `claim_profile()`. A test pins it.
   - The admin's Home opens on the customer panel, without a customer's profile card and tier
     badge.
+- **Sign-in email** (2026-11-24): Supabase Auth sends through Resend's SMTP from
+  `no-reply@varietyh2o.com`, with DKIM, SPF (via Resend's `send` subdomain), and a monitoring-only
+  DMARC record; the domain's Google Workspace mail is untouched. Templates send a 6-digit code with
+  no link, so mail scanners that open links can't use it up.
 - **Email sign-up, admin search, content fixes** (PR #41, live 2026-11-24): roadmap items G, L,
   and B; production deployed and the database migrated the same day (PRs #36, #37, and #41's
   schema in one migration, after a rolled-back dry run on live data).
 - **Password-only admin, required customer email** (PR #42): admin MFA removed (several owners
   share the admin login across devices); `admin_add_customer` and `admin_set_customer_email`
   refuse a missing or blank email, so every customer sets up their own sign-in.
+- **Showcase README** (PR #43, audit item K): product-first README with an architecture diagram
+  and screenshots per size class; developer guide moved to `docs/DEVELOPMENT.md`.
 
 ## Reference: tablet and desktop layout
 Built in PRs #18-#20. The decisions below still apply to any new or reworked screen.

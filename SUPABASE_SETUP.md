@@ -8,7 +8,8 @@ gallon balances, and transactions.
 
 ## Before you begin
 
-If you are new to the repo, start with the project overview in `README.md`. That file explains where the app code lives and where the real business logic exists.
+If you are new to the repo, start with `README.md` (what the app is and why it's built this way)
+and `docs/DEVELOPMENT.md` (where the code lives and how it's tested).
 
 ## 1) Add environment variables
 
