@@ -4,22 +4,143 @@ Planned work for the Variety H2O app, in priority order. Each item records the d
 made and why, so they don't get re-litigated. Move items to **Done** (with the PR number) as they
 ship; add new items in priority order.
 
+## Architecture and design audit (2026-11-24)
+
+A review of the whole app asked one question: knowing what we know now, how would it be built
+from scratch, keeping Supabase and Netlify? The parts that hold money stay as they are: the ledger
+function is the only way to change a balance, column grants and RLS back it up, `schema.sql`
+plus SQL tests, and a read-only assistant. Most of what
+would change sits above the database and goes back to the 2026-04 starter template (a
+`localStorage` "rewards app" with a dark neon theme): how data is loaded, how identity works, the
+vocabulary, and the look. Items are worked one PR at a time.
+
+**Working order** (set 2026-11-24): A (done), G, L, B, C, D, E, I, J, H, K, F. Sign-up comes
+first because almost no customer has a login yet: of about 400 customer records, only the Play
+reviewer's demo account is linked to one.
+
+### A. Remove starter leftovers and dead code -- done (PRs #39, #40)
+- Vite starter CSS still in `src/index.css`: a second `:root` palette (purple `--accent`), 56px
+  `h1`, `#social`, `.counter`.
+- `@capacitor/local-notifications` is installed but unused; it still ships in the Android build.
+- `refreshFromSupabase` tries to link a login to a profile by matching email from the browser. The
+  column grants and RLS now refuse that update, and the error is ignored, so it never works.
+- The admin's own Home shows an avatar and a "Splash" tier badge meant for customers.
+
+### G. One way to sign up: email codes, linked by the email on file -- live (PR #41)
+Decided 2026-11-24. Built in PR #41 and live since 2026-11-24 (production deploy, database
+migration, Resend SMTP, code templates, "Confirm email" on). Revised the same day: the email is
+required when adding a customer, and staff sign in with a password only (see Decided against). Today there are three ways in: staff register a customer with a password staff
+choose, claim codes, and (until PR #39) an email match that never worked. No real customer has
+used any of them, so nothing needs migrating.
+- **Customers sign in with an emailed 6-digit code** (Supabase email OTP). No passwords and no
+  reset emails; the session stays on the device.
+- **Google sign-in stays on the website**, still hidden in the Android app, where Google blocks it.
+- **Linking:** staff save the customer's email on their record at the counter. When someone signs
+  in with a code (or Google) for that email, a `SECURITY DEFINER` database function links the login
+  to the unlinked record whose email matches the caller's *confirmed* auth email. The code proves
+  they own the email; the browser never chooses which record to link.
+- **Unknown email:** a screen asking them to see staff at the counter to add their email, with the
+  store's hours. Customers can't create accounts themselves.
+- **"Add customer"** replaces "Register new user": a name plus a required email, with the customer
+  number assigned by a database sequence (this takes the `max + 1` fix from item C). It moves from
+  Settings into the customer panel. Staff can add or correct the email on a record that has no
+  login yet.
+- **Claim codes are retired:** `/claim`, the Generate Claim Code button,
+  `admin_generate_claim_code()`, `claim_profile()`, and the `claim_code` column go, and outstanding
+  codes are cleared.
+- **Staff keep a password** behind a "Staff sign-in" link, so admin access never depends on an
+  email arriving. Google Play's reviewer account signs in the same way, since
+  reviewers can't receive a code.
+- **Onboarding** happens at the counter on each customer's next visit, the same way paper index
+  cards are being retired.
+- **Email delivery:** Supabase's built-in sender only emails the project's own team, so codes go
+  through Resend's SMTP (free tier) from a `no-reply@varietyh2o.com` address, with SPF/DKIM DNS
+  records. The domain's mailboxes (MX) are untouched. Auth's email rate limit is raised to fit, and
+  "Confirm email" stays on.
+- **Data integrity:** `profiles.auth_user_id` gets a foreign key to `auth.users` with
+  `on delete set null`, so deleting a login unlinks its record instead of leaving it pointing at
+  nothing (one live record was in that state and is unlinked as part of this).
+- **Tests:** SQL tests for the link function (confirmed email only, unlinked records only, one
+  record per login, never an admin record), and Vitest for code sign-in and the unknown-email
+  screen.
+
+### L. Content fixes the owners approved -- built (PR #41), wording awaits owner sign-off
+Decided 2026-11-24. Built in PR #41: the badge and the balance-based tier code are removed (a
+rewards program would redesign tiers anyway), and the Alkaline Water description is drafted.
+- Hide the reward-tier badge until there's a rewards program (see Later). It's based on the
+  current balance, so it drops every time a customer fills up, and it unlocks nothing.
+- The Alkaline Water description sticks to facts (what it is and how it's made) with no
+  health-benefit claims. The new wording is drafted for the owners to approve before it ships.
+
+### B. Load admin data from the server, one customer at a time -- live (PR #41)
+Built in PR #41, live since 2026-11-24: `admin_search_customers`, `admin_get_customer`, and `admin_customer_summary`
+(admin-only, read-only, tested in `admin_lists.test.sql`); sign-in loads only the user's own
+record and 5 latest transactions; admin edits re-fetch only what's on screen. TanStack Query was
+left out: one search list and one details panel didn't justify a new dependency.
+
+Today every sign-in, and every admin action, downloads every customer profile plus the 500 most
+recent transactions, then filters in the browser. The 3+ character search gate only hides the
+list. Instead: an `admin_search_customers(q)` database function, fetch one customer when it's
+selected, and update the screen from what each write returns. A query library (TanStack Query)
+handles caching; `UserProvider` keeps only auth.
+
+### C. Data model fixes
+- `member_since` becomes a `date`. It's text from `toLocaleDateString()`, so its format depends on
+  whose browser wrote it.
+- Ledger entries get a `kind` (purchase, fill, correction, forfeit) instead of reading the sign of
+  `amount`, so the forfeit row and corrections stop being special cases.
+- (Customer numbers from a database sequence moved into item G.)
+
+### D. Real URLs instead of tab state
+`/menu`, `/menu/:category`, `/location`, `/account`, `/admin/customers/:id`. This fixes Android's
+back button exiting the app, keeps your place on refresh, and makes the menu linkable from
+Facebook and search. Admin becomes its own area instead of replacing the customer's Home tab.
+
+### E. Menu, prices, and hours in the database
+Decided 2026-11-24: admins edit them in the app. Prices, hours, and the address live in JS today,
+so every change needs a developer, a PR, and a deploy. Move them to public-read tables
+(`menu_items`, `store_info`) with an admin editing screen. Syncing from the Square catalog is under
+Later.
+
+### I. Visual refresh
+Decided 2026-11-24: a light theme by default that switches to dark when the phone is in dark mode.
+Also one brand header (the login screen still uses emoji and text instead of the logo), one icon
+family, a calmer type scale, and left-aligned content. Under it: CSS Modules or Tailwind on the
+existing `--vh2o-*` tokens, and about six shared components (Button, Card, Field, Sheet, Pill,
+ListRow) to replace hand-styled inline buttons. Clickable prototype first, as with the
+tablet/desktop layouts.
+
+### J. Error reporting
+Decided 2026-11-24: Sentry's free tier for the website and the Android app. Reports carry no
+customer names or emails.
+
+### H. Membership card, and history customers can read
+Show the customer number as a card with a QR code that staff scan to open the account. History
+groups entries by day and shows the staff note.
+
+### K. Showcase README
+The public mirror's README is the first thing a reviewer reads. Rewrite it around the product
+and the design decisions: what problem it solves, an architecture diagram, screenshots per size
+class, how the ledger stays tamper-proof, how the assistant stays read-only, and how it's tested.
+
+### F. Counter-first admin screen
+The most frequent task is find a customer, enter gallons, choose Filled or Bought. Make that the
+admin's main screen: a large search/scan box, buttons for common jug sizes, and an undo window
+instead of a confirmation sheet. The assistant moves to its own tab. (An owner/staff role split was
+considered and isn't needed for now; see Later.)
+
 ## Next up
 
-### 1. In-app reward reminders
-E.g. "you're close to your next reward", shown when the customer opens the app. **No SMS** (avoids
-Twilio A2P 10DLC registration and per-message cost) and **no Firebase/FCM push** -- in-app only.
-
-### 2. Facebook login (optional)
-Only if wanted. Would follow the Google pattern (`signInWithOAuth({ provider: 'facebook' })`, web
-only) plus a Meta for Developers app and Supabase provider config.
+Former items 1 (reward reminders) and 2 (Facebook login) moved to Later and Decided against. The
+assistant keeps its number because code comments refer to "ROADMAP item 3".
 
 ### 3. "Ask the ledger" assistant (admin only)
 Owners type plain-language questions about customers, balances, and visits (e.g. "Who hasn't come
 in for 60 days?", "How much prepaid balance is outstanding?", "What were last week's busiest
-days?") and get answers grounded in the live data. **In progress** (branch `admin-assistant`): the
-tools, Edge Function, admin UI, and tests are built; the eval suite and the owners' API key are
-still to do.
+days?") and get answers grounded in the live data. **Live** (2026-10-16): the database functions,
+the `admin-assistant` Edge Function, and the API key are in production, and it was tried on a
+Deploy Preview. The admin panel reaches varietyh2o.com with the next site deploy. Still to do: the
+eval suite.
 
 **Architecture constraints:**
 - Runs in a Supabase Edge Function. The Anthropic API key lives only in Edge Function secrets,
@@ -52,10 +173,11 @@ still to do.
 5. ~~Logging~~ Built: one JSON line per request in the function logs (tool names, iterations,
    tokens, latency, outcome), with no question text, arguments, or results.
 6. ~~Unit/integration tests~~ Built: Vitest for the loop, UI, and provider; SQL tests for the tools.
-7. Go live: an Anthropic API key in the Edge Function secrets (whose account, and a spend cap),
-   apply the `schema.sql` changes, deploy the function, and try it on a Deploy Preview.
+7. ~~Go live~~ Done 2026-10-16: `ANTHROPIC_API_KEY` set as an Edge Function secret, the
+   `schema.sql` tools applied as migration `add_admin_assistant_tools`, the function deployed with
+   JWT verification on, and tried on a Deploy Preview.
 
-**Decisions made while building** (easy to change if the owners see it differently):
+**Decisions made while building** (confirmed 2026-11-24):
 - A **visit** is one customer on one store-local day (Tucson, `America/Phoenix`) with at least one
   ledger entry, a fill or a purchase. The forfeit written when an account is deleted doesn't count.
 - **Customer lookup** matches the customer number, or part of a name or email (no phone column).
@@ -74,9 +196,19 @@ conventions against the docs.
 **Possible follow-on (separate item):** draft win-back messages for lapsed customers for owners to
 review and send manually -- never auto-sent.
 
+## Later
+- **Rewards program and in-app reward reminders** (former item 1), shelved 2026-11-24 until the
+  owners want a rewards program. The intake questionnaire is ready
+  (`src/assets/rewards-program-intake-questionnaire.md`). In-app only: **no SMS** (avoids Twilio
+  A2P 10DLC registration and per-message cost) and **no Firebase/FCM push**. The tier badge stays
+  hidden until then (item L).
+- **Owner/staff roles:** separate owner powers (data deletion, prices, the assistant) from counter
+  staff (ledger entries and lookups). Not needed for now (2026-11-24); one admin role covers it.
+- **Square catalog sync** for menu prices, after item E.
+
 ## Open operational tasks
-- **Google Play review:** version 1.0 was submitted on 2026-10-15 and goes live in the US as soon as
-  Google approves it. Keep the reviewer account unchanged until then.
+- **Android 1.1** (`versionCode 4`): ships the plugin removal from PR #39 and the new sign-in from
+  item G. Update Play's reviewer sign-in details with it.
 
 ## Decided against
 - **Apple Sign-In:** only required by App Store Review Guideline 4.8, and iOS ships as an
@@ -84,7 +216,16 @@ review and send manually -- never auto-sent.
   App Store distribution becomes a goal.
 - **Native iOS project:** removed for the same reason (PR #7); recreate with `npx cap add ios` if
   ever needed.
-- **Phone-number login / SMS:** tried and reverted (`ac7e935`); email + password stays primary.
+- **Phone-number login / SMS:** tried and reverted (`ac7e935`). Email stays primary (codes, per
+  item G).
+- **Admin MFA** (PR #37), removed 2026-11-24 by the owners' choice: several owners share the one
+  admin login across their own devices, and a single authenticator app didn't fit. Sharing one
+  authenticator secret across devices, or one admin login per owner, were offered and declined.
+  Admin access is the password alone; the trade-off is that a leaked admin password gives full
+  access, so it lives in a password manager.
+- **Facebook login** (former item 2), dropped 2026-11-24: email codes and Google cover sign-in,
+  and Facebook needs a Meta developer app, data-deletion setup, and possibly business
+  verification.
 - **Google sign-in inside the Android app:** Google blocks OAuth in embedded webviews; the button
   is web-only. Native Google sign-in would need a system-browser/deep-link flow.
 
@@ -302,7 +443,7 @@ Play, WordPress.com) is noted where it happened.
   confirmation link first.
 - **Brand icons** (PR #28, deployed 2026-10-15): the Vite/Capacitor placeholder icons and splash
   were replaced with the "H2O + cone" mark from the logo, on white. Sources are in
-  `chill-and-sip/assets/`; the Android launcher icons and splash are generated from them with
+  `assets/`; the Android launcher icons and splash are generated from them with
   `npx @capacitor/assets generate --android` (never hand-edited).
 - **Google Play submission** (PR #29, submitted 2026-10-15):
   - Android 1.0 was sent to the production track, US only, and goes live when Google approves it.
@@ -352,6 +493,38 @@ Play, WordPress.com) is noted where it happened.
   verbatim, so DOM IDs and tests are unchanged. Two small differences: the admin's register-a-
   customer form and an expanded menu item's description now reset when you leave their tab.
 
+### Phase 6 -- Assistant UI, security audit fixes, repo layout (2026-10-16 to 11-24)
+- **Assistant UI and the 60-day rule** (PR #34): the "Ask the ledger" panel, and Active/Inactive
+  now counts visits only, over 60 days.
+- **Lighthouse fixes** (PR #35): the logo shrank from 4439px to 1080px wide (145 KB to 39 KB) with
+  fixed dimensions so the page stops jumping, no database reads while signed out, a real
+  `robots.txt`, and a theme-color tag.
+- **Balances change only through the ledger** (PR #36): the admin's RLS update policy covered
+  every column, so an admin session could set `gallons` directly with no ledger row. Signed-in
+  users can now update only `water_type`; `profile_writes.test.sql` proves it.
+- **Admin MFA** (PR #37): `is_admin()` required an authenticator-verified (`aal2`) session. Live
+  briefly on 2026-11-24, then removed (see Decided against).
+- **Android 1.0 live on Google Play** (US), approved after the 2026-10-15 submission.
+- **Flat repo layout** (PRs #38, #40): the app moved from `chill-and-sip/` (the starter template's
+  folder name) to the repo root. CI, Netlify, and the docs follow; file history is kept as
+  renames.
+- **Starter leftovers and dead code removed** (PRs #39, #40, audit item A):
+  - The Vite starter's CSS is gone from `src/index.css`. It also set the default text color to a
+    purple-gray (`#6b6375`) on phones in light mode, unreadable on navy; text without its own
+    color now uses the app's muted gray.
+  - `@capacitor/local-notifications` was uninstalled and the Android Gradle files regenerated with
+    `npx cap sync`. It leaves the Android app with the next Play upload.
+  - The never-working "link a login by matching email" step is gone from `refreshFromSupabase`;
+    logins link only through an admin creating the profile or `claim_profile()`. A test pins it.
+  - The admin's Home opens on the customer panel, without a customer's profile card and tier
+    badge.
+- **Email sign-up, admin search, content fixes** (PR #41, live 2026-11-24): roadmap items G, L,
+  and B; production deployed and the database migrated the same day (PRs #36, #37, and #41's
+  schema in one migration, after a rolled-back dry run on live data).
+- **Password-only admin, required customer email** (PR #42): admin MFA removed (several owners
+  share the admin login across devices); `admin_add_customer` and `admin_set_customer_email`
+  refuse a missing or blank email, so every customer sets up their own sign-in.
+
 ## Reference: tablet and desktop layout
 Built in PRs #18-#20. The decisions below still apply to any new or reworked screen.
 - **Audience:** customers and admin alike.
@@ -390,7 +563,7 @@ Built in PRs #18-#20. The decisions below still apply to any new or reworked scr
 - **Implementation:** `useSizeClass()` in `src/lib/ui.js` is the single source of truth, mirrored onto
   `<html data-size>`; layout CSS lives in `src/index.css` (not the `css` string, which Login and
   ClaimAccount don't render) and keys off `html[data-size=...]`. Existing DOM IDs stay stable;
-  new elements (e.g. desktop nav) get new IDs documented in `chill-and-sip/TEST_IDS.md`.
+  new elements (e.g. desktop nav) get new IDs documented in `TEST_IDS.md`.
 - **Process:** a private clickable prototype first (fake data only; login, tracker, menu,
   location, settings, admin list+detail; phone/tablet/desktop switcher) for feedback, then PRs:
   1. Size-class foundation + top/bottom navigation -- done (PR #18).

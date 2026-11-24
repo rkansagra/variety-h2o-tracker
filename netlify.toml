@@ -1,5 +1,4 @@
 [build]
-  base = "chill-and-sip"
   command = "npm run build"
   publish = "dist"
   # Every git push to main was auto-triggering a full production build (consuming build
@@ -22,7 +21,7 @@
   NODE_VERSION = "22"
 
 # Client-side routing (react-router-dom): let the app handle every path itself instead of
-# Netlify 404ing on a direct link or hard refresh to /login, /claim, etc.
+# Netlify 404ing on a direct link or hard refresh to /login, /no-account, etc.
 [[redirects]]
   from = "/*"
   to = "/index.html"

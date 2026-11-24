@@ -2,35 +2,31 @@
 
 This repo contains the web/mobile app for Variety H2O, built with React, Vite, and Capacitor.
 
-The active product code lives under `chill-and-sip/`.
-
 ## What the app does
 
 - Customer-facing tracker and account status
 - Admin dashboard for managing customer gallons and transactions
 - Menu and location information
-- Claim-code flow for imported or legacy customers to create their own login
+- Passwordless sign-in: customers get an emailed code, and their login links to the record staff
+  saved that email on
 - Supabase-backed transaction history and auth
 - Native Android wrapper via Capacitor; iOS users install the PWA from Safari
 
 ## Directory breakdown
 
-### `chill-and-sip/`
-This is the real application codebase.
-
-- `src/main.jsx` — app bootstrap. Locks portrait orientation on mobile and mounts the main app.
+- `src/main.jsx` — app bootstrap. Locks portrait on phone-sized native screens and mounts the main app.
 - `src/App.jsx` — providers and routes only.
 - `src/UserProvider.jsx` — auth/session, loading profiles and transactions from Supabase,
-  gallon adjustments, claim codes, data deletion, and biometric lock. Read it with `useUser()`
+  gallon adjustments, adding customers and linking logins, data deletion, and biometric lock. Read it with `useUser()`
   from `src/userContext.js`.
-- `src/screens/` — one component per route (`Login`, `ForgotPassword`, `ClaimAccount`,
+- `src/screens/` — one component per route (`Login`, `ForgotPassword`, `NoAccount`,
   `MainApp`), plus `BiometricLockScreen` and `UnlinkedSessionRedirect`.
 - `src/screens/tabs/` — MainApp's four tabs: Home (`TrackerTab`), `MenuTab`, `LocationTab`,
   `SettingsTab`.
 - `src/admin/` — the admin's customer panel and customer card.
 - `src/menu/menuData.js` — menu categories and prices.
 - `src/lib/` — pure helpers and hooks (customer mapping/filtering, layout hooks, formatting,
-  tiers, biometrics labels, URLs), plus `supabaseClient.js` (Supabase client setup).
+  biometrics labels, store info, URLs), plus `supabaseClient.js` (Supabase client setup).
 - `src/components/` — small shared components.
 - `src/styles.js` — the shared inline style objects and CSS string.
 - `src/assets/` — static images and branding assets
@@ -48,13 +44,15 @@ call its actions through `useUser()`. Start there to understand behavior, then t
 
 The app uses Supabase as the main source of truth.
 
-- Authentication is handled through Supabase Email/Password auth.
+- Authentication is Supabase Auth: emailed one-time codes (and Google) for customers, email +
+  password for staff.
 - User and customer data is stored in the `profiles` table.
 - Gallon changes are not done ad hoc in the client; they go through the `admin_adjust_gallons(...)` Postgres function.
 - Transaction rows are stored in `gallon_transactions` and shown in history screens.
 - `UserProvider` (`src/UserProvider.jsx`) is the central state holder for:
   - current user/session
-  - user list
+  - the signed-in user's own profile and recent history (the admin's customer list is searched
+    on the server, one query at a time)
   - notifications
   - app loading state
   - password recovery flow
@@ -65,14 +63,13 @@ When an admin changes a customer balance, the flow is roughly:
 2. Client invokes Supabase RPC `admin_adjust_gallons`
 3. Postgres validates admin privilege and balance rules
 4. Balance and transaction record are updated atomically
-5. The app refreshes state and sends a local notification to the affected customer
+5. The app refreshes state, and the customer's open app updates through Supabase Realtime
 
 ## Quick start
 
 From the repo root:
 
 ```bash
-cd chill-and-sip
 npm install
 cp .env.example .env
 ```
@@ -107,10 +104,10 @@ npm run test:coverage
 ## Automated tests
 
 Tests import what they need straight from its module: pure helpers from `src/lib/`,
-`UserProvider` and `useUser`/`UserContext`, and screens such as `Login` and `ClaimAccount`.
+`UserProvider` and `useUser`/`UserContext`, and screens such as `Login` and `NoAccount`.
 
 - `src/App.pure.test.jsx` — pure logic: active/inactive window math, notification capping,
-  profile/transaction mapping, reward tiers.
+  profile/transaction mapping.
 - `src/Login.test.jsx` — component-level: renders `<Login />` with a hand-fed fake
   `UserContext` value (not the real `UserProvider`), so it tests Login's own rendering/event
   logic without touching Supabase at all.
