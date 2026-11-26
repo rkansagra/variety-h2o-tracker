@@ -17,6 +17,17 @@ Create `.env` from `.env.example` and set:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `VITE_SENTRY_DSN` (optional): turns on error reporting (`src/lib/errorReporting.js`) in
+  production builds. Create a free Sentry project (platform: React), copy its DSN, and set it in
+  Netlify's environment variables and in the `.env` used for Android release builds. In the
+  Sentry project's settings, keep "Data Scrubber" on and turn on "Prevent Storing of IP
+  Addresses". The app also strips names, emails, and URL query strings before sending. Leave it
+  unset to send nothing.
+- `SENTRY_AUTH_TOKEN` (optional, Netlify only, marked secret, Production context): lets the build
+  upload source maps so Sentry shows readable stack traces (`vite.config.js`). Create it in Sentry
+  under Settings > Developer Settings > Organization Tokens. The build deletes the maps after
+  uploading, so they're never served. Without it, the build makes no source maps; a bad token
+  only logs an error, it doesn't fail the deploy.
 
 ## 2) Create database schema
 
@@ -25,6 +36,10 @@ Create `.env` from `.env.example` and set:
 3. This creates `profiles`, `gallon_transactions`, row-level security policies, and the
    `admin_adjust_gallons(...)` function that the app uses for every credit/debit. The script is
    idempotent and safe to re-run.
+4. Run `supabase/seed/menu.sql` once to load the menu, prices, and store info. It adds categories
+   and store info only if missing, and items only while the item table is empty, so re-running it
+   never overwrites the admin's edits. After that the admin edits everything but the categories at
+   Admin -> Edit menu & hours; each edit is logged in `menu_changes` (who, when, before and after).
 
 ## 3) Auth configuration
 
@@ -67,7 +82,7 @@ In Supabase Dashboard → Authentication:
 
 ```sql
 insert into public.profiles (auth_user_id, email, role, gallons, name, member_since, legacy_id)
-values ('PASTE-YOUR-ADMIN-AUTH-UUID-HERE', 'you@example.com', 'admin', 0, 'Your Name', 'N/A', 1)
+values ('PASTE-YOUR-ADMIN-AUTH-UUID-HERE', 'you@example.com', 'admin', 0, 'Your Name', null, 1)
 on conflict (email) do update
 set role = excluded.role,
     name = excluded.name,
@@ -75,9 +90,8 @@ set role = excluded.role,
 ```
 
 4. Log into the app with "Staff sign-in" and that email/password; you land as admin.
-   - **No authenticator step.** Admin MFA (PR #37) was removed on 2026-11-24 because several owners
-     share the one admin login across their own devices. Admin access is the password alone, so
-     use a long, unique password, and share it only through a password manager.
+   - **No authenticator step.** Admin MFA (PR #37) was removed on 2026-11-24 by the owners'
+     choice, so use a long, unique password kept in a password manager.
 
 ## 5) App behavior notes
 
@@ -92,7 +106,10 @@ set role = excluded.role,
   below zero. There is no other way to change a balance — regular customers cannot update their own
   `gallons` value even by calling the Supabase API directly (no RLS policy permits it).
 - Every credit/debit can include an optional note, and requires a confirmation step in the UI before
-  it's applied.
+  it's applied. Each ledger entry has a `kind` (purchase, fill, correction, forfeit).
+- A mistaken entry is never edited: "Correct a mistake…" in the customer's full history calls
+  `admin_correct_transaction(...)`, which writes a linked `correction` entry with a required note
+  (once per entry, never below zero, not counted as a visit).
 - The customer's own Home tab shows their 5 most recent transactions; admin can open a customer's
   full transaction history from the customer panel for reconciliation or disputes.
 - There is no localStorage fallback for customers/balances/transactions — if Supabase is unreachable,

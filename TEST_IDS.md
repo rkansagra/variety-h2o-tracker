@@ -73,7 +73,7 @@ Staff sign-in (password; also shown for a password-reset session):
 - `vh2o-no-account-content`
 - `vh2o-no-account-title`
 - `vh2o-no-account-message`
-- `vh2o-no-account-store`
+- `vh2o-no-account-store` (only once the store details have loaded)
 - `vh2o-no-account-check-again-btn`
 - `vh2o-no-account-still-missing` (after Check again finds nothing)
 - `vh2o-no-account-different-email-btn`
@@ -85,13 +85,14 @@ Staff sign-in (password; also shown for a password-reset session):
 - `vh2o-app-phone`
 - `vh2o-app-header` (phone and tablet only)
 - `vh2o-app-header-logo` (phone and tablet only)
+- `vh2o-app-header-account` (phone and tablet, signed in only: the initials, opens Settings)
 - `vh2o-app-content`
 
 ## Top nav (desktop only)
 
 - `vh2o-top-nav`
 - `vh2o-top-nav-logo`
-- `vh2o-top-nav-tracker`
+- `vh2o-top-nav-tracker` (Home for customers, Customers for the admin)
 - `vh2o-top-nav-menu`
 - `vh2o-top-nav-locations`
 - `vh2o-top-nav-settings`
@@ -101,7 +102,7 @@ Staff sign-in (password; also shown for a password-reset session):
 ## Bottom nav (phone and tablet only)
 
 - `vh2o-bottom-nav`
-- `vh2o-bottom-nav-tracker`
+- `vh2o-bottom-nav-tracker` (Home for customers, Customers for the admin)
 - `vh2o-bottom-nav-menu`
 - `vh2o-bottom-nav-locations`
 - `vh2o-bottom-nav-settings`
@@ -111,15 +112,17 @@ Staff sign-in (password; also shown for a password-reset session):
 - `vh2o-tracker-home` (wraps profile + history; class `vh2o-home` for customers)
 - `vh2o-tracker-profile`
 - `vh2o-tracker-section`
-- `vh2o-tracker-avatar-ring`
-- `vh2o-tracker-avatar` (customer initials)
-- `vh2o-tracker-user-name`
-- `vh2o-tracker-member-since`
+- `vh2o-tracker-user-name` (the "Hi, <first name>" greeting)
+- `vh2o-tracker-member-since` (only when the join date is known)
 - `vh2o-tracker-water-type`
-- `vh2o-tracker-points-pill`
+- `vh2o-tracker-points-pill` (the balance card)
 - `vh2o-tracker-history-title`
 - `vh2o-tracker-history` (customers: wraps the transaction rows / empty message)
 - `vh2o-tracker-history-empty`
+- `vh2o-tracker-signed-out` (Home tapped while signed out; opening the site signed out lands on the menu)
+- `vh2o-tracker-login-btn`
+- `vh2o-tracker-browse-menu-btn`
+- `vh2o-tracker-history-unavailable` (the history couldn't be loaded; the balance still shows)
 
 Dynamic transaction rows:
 
@@ -127,8 +130,14 @@ Dynamic transaction rows:
 - `vh2o-tracker-notification-icon-<notifId>`
 - `vh2o-tracker-notification-amount-<notifId>`
 - `vh2o-tracker-notification-time-<notifId>`
+- `vh2o-tracker-notification-note-<notifId>` (corrections only)
 
 ## Tracker (admin)
+
+Admin sections switcher (above every admin page):
+
+- `vh2o-admin-subnav`
+- `vh2o-admin-subnav-customers` / `vh2o-admin-subnav-menu` (`aria-pressed` on the current one)
 
 - `vh2o-admin-manage-users`
 - `vh2o-admin-manage-users-title`
@@ -212,24 +221,73 @@ Full transaction history sheet:
 - `vh2o-admin-history-title`
 - `vh2o-admin-history-empty`
 - `vh2o-admin-history-close-btn`
+- `vh2o-admin-history-corrected-<txId>` (an entry a correction reversed)
+- `vh2o-admin-history-correct-btn-<txId>` (uncorrected purchases and fills only)
+- `vh2o-admin-history-correct-form-<txId>` (while correcting)
+- `vh2o-admin-history-correct-note-<txId>`
+- `vh2o-admin-history-correct-submit-<txId>`
+- `vh2o-admin-history-correct-cancel-<txId>`
+- `vh2o-admin-history-correct-error`
 
 Dynamic history rows:
 
 - `vh2o-admin-history-row-<transactionId>`
 
+## Menu & hours editor (admin, `/admin/menu`)
+
+`<itemId>` is the `menu_items` id; `<categoryId>` is the category id (e.g. `smoothies`); `<key>` is a
+size's key (e.g. `large`).
+
+- `vh2o-admin-menu`
+- `vh2o-admin-menu-loading` / `vh2o-admin-menu-unavailable` (no live menu, so no editing)
+- `vh2o-admin-store-form`
+- `vh2o-admin-store-address1` / `-address2` / `-phone` / `-tagline` / `-welcome`
+- `vh2o-admin-store-orderUrl` / `-facebookUrl` / `-mapsGoogleUrl` / `-mapsAppleUrl`
+- `vh2o-admin-store-hours-days-<index>` / `vh2o-admin-store-hours-hours-<index>`
+- `vh2o-admin-store-hours-remove-<index>`
+- `vh2o-admin-store-hours-add` (while fewer than 7 lines)
+- `vh2o-admin-store-save`
+- `vh2o-admin-store-result`
+- `vh2o-admin-menu-category-select`
+- `vh2o-admin-menu-category-<categoryId>-sizes` (categories with size prices)
+- `vh2o-admin-menu-category-<categoryId>-size-<key>-label` / `-price`
+- `vh2o-admin-menu-category-<categoryId>-sizes-save` / `-sizes-result`
+- `vh2o-admin-menu-items`
+- `vh2o-admin-menu-item-<itemId>`
+- `vh2o-admin-menu-item-hidden-<itemId>` (the Hidden tag)
+- `vh2o-admin-menu-item-edit-<itemId>`
+- `vh2o-admin-menu-item-form-<itemId>` (while editing)
+- `vh2o-admin-menu-item-name-<itemId>` / `-price-<itemId>` / `-unit-<itemId>` / `-description-<itemId>`
+- `vh2o-admin-menu-item-hidden-toggle-<itemId>`
+- `vh2o-admin-menu-item-<itemId>-size-<key>-label` / `-price` (items with their own sizes)
+- `vh2o-admin-menu-item-<itemId>-sizes-save` / `-sizes-result`
+- `vh2o-admin-menu-item-save-<itemId>` / `-cancel-<itemId>`
+- `vh2o-admin-menu-item-delete-<itemId>`, then `vh2o-admin-menu-item-delete-confirm-<itemId>`
+- `vh2o-admin-menu-item-result-<itemId>`
+- `vh2o-admin-menu-add-form`
+- `vh2o-admin-menu-add-name` / `-price` / `-unit` / `-description`
+- `vh2o-admin-menu-add-submit`
+- `vh2o-admin-menu-add-result`
+- `vh2o-admin-menu-history`
+- `vh2o-admin-menu-history-empty`
+- `vh2o-admin-menu-history-<changeId>`
+
 ## Menu
 
 - `vh2o-menu-section`
-- `vh2o-menu-tagline`
-- `vh2o-menu-welcome`
+- `vh2o-menu-loading` / `vh2o-menu-unavailable` (instead of the menu; unavailable = it can't load and
+  this device has no saved copy)
+- `vh2o-menu-cached-note` (offline: showing this device's saved copy, with its date)
+- `vh2o-menu-tagline` (only when the store details have one)
+- `vh2o-menu-welcome` (only when the store details have one)
 - `vh2o-menu-title`
-- `vh2o-menu-categories-grid` (phone and tablet only)
+- `vh2o-menu-categories-grid` (phone and tablet only; a list of category rows)
 - `vh2o-menu-back-btn` (phone and tablet only)
 - `vh2o-menu-items` (the selected category's items)
 - `vh2o-menu-category-list` (desktop only; the first category is selected by default)
 - `vh2o-menu-category-title` (desktop only)
 
-Dynamic category cards (phone and tablet only):
+Dynamic category rows (phone and tablet only):
 
 - `vh2o-menu-category-card-<categoryId>`
 - `vh2o-menu-category-name-<categoryId>`
@@ -243,8 +301,8 @@ Dynamic item rows:
 - `vh2o-menu-item-card-<categoryId>-<itemSlug>`
 - `vh2o-menu-item-name-<categoryId>-<itemSlug>`
 - `vh2o-menu-item-price-<categoryId>-<itemSlug>` (only rendered for items with no size tiers, i.e. `item.flatPrice` or a flat `item.price`, AND whose price isn't shared with any other item in the category -- see consolidated pricing below)
-- `vh2o-menu-item-description-<categoryId>-<itemSlug>`
-- `vh2o-menu-item-size-btn-<categoryId>-<itemSlug>-<tierKey>` -- `tierKey` comes from the item's tier list (`CATEGORY_SIZE_TIERS[categoryId]`, or the item's own `customTiers`): `small`/`large` for Smoothies, Milkshakes, Snowcones; `single`/`double`/`triple` for Ice Cream. Only rendered when this item's exact price/tier combination isn't shared with any other item in the category.
+- `vh2o-menu-item-description-<categoryId>-<itemSlug>` (only for items with a description; always shown)
+- `vh2o-menu-item-size-btn-<categoryId>-<itemSlug>-<tierKey>` -- a size and its price (a label, not a button, despite the name) -- `tierKey` comes from the item's sizes (its category's `size_tiers`, or the item's own): `small`/`large` for Smoothies, Milkshakes, Snowcones; `single`/`double`/`triple` for Ice Cream. Only rendered when this item's exact price/tier combination isn't shared with any other item in the category.
 
 Consolidated pricing (when 2+ items in a category share the exact same price or tier set, e.g. every Milkshake flavor is $8.05/$10.12 by size): the shared price/tiers render once as a pricing bar instead of once per item, and those items render as plain name-only chips with no `vh2o-menu-item-price-*` or `vh2o-menu-item-size-btn-*` id (their `vh2o-menu-item-card-*` / `vh2o-menu-item-name-*` ids are unaffected). A price/tier set held by only one item in the category still gets its own full card as before.
 
@@ -253,6 +311,7 @@ Consolidated pricing (when 2+ items in a category share the exact same price or 
 ## Locations
 
 - `vh2o-locations-section`
+- `vh2o-locations-loading` / `vh2o-locations-unavailable` (instead of the cards)
 - `vh2o-locations-title`
 - `vh2o-locations-cards` (grid of the cards below)
 - `vh2o-locations-address-card`
@@ -289,6 +348,11 @@ Biometric unlock (only rendered when the device reports biometry is available --
 - `vh2o-settings-biometric-title`
 - `vh2o-settings-biometric-toggle-btn`
 - `vh2o-settings-biometric-error`
+
+## Crash screen (shown if the app crashes)
+
+- `vh2o-crash`
+- `vh2o-crash-reload-btn`
 
 ## Biometric lock screen
 

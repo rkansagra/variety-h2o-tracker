@@ -4,11 +4,9 @@ import { Capacitor } from "@capacitor/core";
 import { useUser } from "../userContext";
 import { styles } from "../styles";
 import PrivacyPolicyLink from "../components/PrivacyPolicyLink";
+import BrandLogo from "../components/BrandLogo";
 
-const linkButtonStyle = {
-  background: "none", border: "none", color: "var(--vh2o-accent)", textDecoration: "underline",
-  cursor: "pointer", fontSize: 13, fontFamily: "inherit",
-};
+const linkButtonStyle = styles.linkBtn;
 
 // Customers sign in with an emailed 6-digit code (or Google on the web); staff use "Staff
 // sign-in" (email + password). A password-reset link also lands
@@ -139,15 +137,15 @@ export function Login() {
   return (
     <div id="vh2o-login-root" className="vh2o-root vh2o-auth" style={styles.root}>
       <div id="vh2o-login-phone" className="vh2o-phone" style={styles.phone}>
-        <div id="vh2o-login-content" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div id="vh2o-login-store-name" style={styles.storeName}>
-            <span style={{ fontSize: 22 }}>🧊</span>
-            <span>Variety H2O + Ice Cream</span>
-            <span style={{ fontSize: 22 }}>💧</span>
-          </div>
+        <div id="vh2o-login-content" style={{ padding: "48px 24px 32px" }}>
+          <BrandLogo id="vh2o-login-store-name" className="vh2o-auth-logo" />
 
           {!showStaff && !codeSentTo && (
-            <form id="vh2o-login-code-request-form" onSubmit={handleSendCode} style={{ marginTop: 40 }}>
+            <form id="vh2o-login-code-request-form" onSubmit={handleSendCode}>
+              <h1 style={styles.pageTitle}>Sign in</h1>
+              <p style={{ ...styles.pageSubtitle, fontSize: 15, margin: "6px 0 20px" }}>
+                We&apos;ll email you a 6-digit code. No password to remember.
+              </p>
               <label htmlFor="vh2o-login-email-input" style={styles.fieldLabel}>Email</label>
               <input
                 id="vh2o-login-email-input"
@@ -179,8 +177,9 @@ export function Login() {
           )}
 
           {!showStaff && codeSentTo && (
-            <form id="vh2o-login-code-verify-form" onSubmit={handleVerifyCode} style={{ marginTop: 40 }}>
-              <p id="vh2o-login-code-sent-to" style={{ color: "var(--vh2o-text-muted)", fontSize: 14, marginBottom: 16 }}>
+            <form id="vh2o-login-code-verify-form" onSubmit={handleVerifyCode}>
+              <h1 style={styles.pageTitle}>Check your email</h1>
+              <p id="vh2o-login-code-sent-to" style={{ ...styles.pageSubtitle, fontSize: 15, lineHeight: "22px", margin: "6px 0 20px" }}>
                 We sent a 6-digit code to <strong style={{ color: "var(--vh2o-text)" }}>{codeSentTo}</strong>.
                 It may take a minute; check your spam folder too.
               </p>
@@ -193,14 +192,14 @@ export function Login() {
                 maxLength={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                style={{ ...styles.input, letterSpacing: 6, textAlign: "center", fontSize: 20 }}
+                style={{ ...styles.input, letterSpacing: 8, fontSize: 22, fontWeight: 700 }}
                 required
               />
               <button id="vh2o-login-verify-code-btn" type="submit" disabled={isBusy} style={{ ...styles.loginBtn, opacity: isBusy ? 0.6 : 1 }}>
                 {isBusy ? "Checking…" : "Sign in"}
               </button>
               {messages}
-              <p style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 16 }}>
+              <p style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 20 }}>
                 <button id="vh2o-login-resend-code-btn" type="button" onClick={handleResendCode} disabled={isBusy} style={linkButtonStyle}>
                   Send a new code
                 </button>
@@ -212,8 +211,8 @@ export function Login() {
           )}
 
           {showStaff && (
-            <form id="vh2o-login-staff-form" onSubmit={handleStaffSubmit} style={{ marginTop: 40 }}>
-              <div id="vh2o-login-staff-title" style={{ ...styles.sectionTitle, marginBottom: 10 }}>Staff sign-in</div>
+            <form id="vh2o-login-staff-form" onSubmit={handleStaffSubmit}>
+              <h1 id="vh2o-login-staff-title" style={{ ...styles.pageTitle, marginBottom: 20 }}>Staff sign-in</h1>
               <label htmlFor="vh2o-login-username-input" style={styles.fieldLabel}>Email</label>
               <input
                 id="vh2o-login-username-input"
@@ -237,7 +236,7 @@ export function Login() {
               <button id="vh2o-login-submit" type="submit" style={styles.loginBtn}>Login</button>
               {isPasswordRecovery && (
                 <>
-                  <div id="vh2o-login-recovery-title" style={{ ...styles.sectionTitle, marginTop: 14 }}>Set New Password</div>
+                  <h2 id="vh2o-login-recovery-title" style={{ ...styles.sectionTitle, margin: "20px 0 12px" }}>Set a new password</h2>
                   <label htmlFor="vh2o-login-recovery-password-input" style={styles.fieldLabel}>New password</label>
                   <input
                     id="vh2o-login-recovery-password-input"
@@ -273,15 +272,15 @@ export function Login() {
           )}
 
           {showStaff && !isPasswordRecovery && (
-            <p style={{ marginTop: 16, fontSize: 13 }}>
+            <p style={{ marginTop: 16, fontSize: 15 }}>
               {/* Carries whatever was typed in the email field over to the reset page. */}
-              <Link id="vh2o-login-forgot-link" to="/forgot-password" state={{ email }} style={{ color: "var(--vh2o-accent)" }}>
+              <Link id="vh2o-login-forgot-link" to="/forgot-password" state={{ email }} style={{ color: "var(--vh2o-accent-soft)", fontWeight: 700 }}>
                 Forgot password?
               </Link>
             </p>
           )}
           {!isPasswordRecovery && (
-            <p style={{ marginTop: 16, fontSize: 13 }}>
+            <p style={{ marginTop: 24 }}>
               {showStaff ? (
                 <button id="vh2o-login-customer-link" type="button" onClick={() => switchMode("customer")} style={linkButtonStyle}>
                   Customer sign-in

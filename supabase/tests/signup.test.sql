@@ -158,7 +158,7 @@ begin
   -- Adding customers: numbers come from the sequence, one after another; the email is required.
   r := public.admin_add_customer('  First Added  ', 'first.added@example.com');
   if r.name <> 'First Added' or r.email <> 'first.added@example.com' or r.gallons <> 0 then raise exception 'FAIL added %', r; end if;
-  if r.member_since !~ '^[A-Z][a-z]+ [0-9]{4}$' then raise exception 'FAIL member_since %', r.member_since; end if;
+  if r.member_since is distinct from (now() at time zone 'America/Phoenix')::date then raise exception 'FAIL member_since %', r.member_since; end if;
   first_number := r.legacy_id;
   r := public.admin_add_customer('Second Added', 'Second.Added@example.com');
   if r.legacy_id <> first_number + 1 then raise exception 'FAIL numbers % then %', first_number, r.legacy_id; end if;

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Minus, Plus } from "lucide-react";
 import { useUser } from "../userContext";
 import { ICON_SIZE, buttonProps, useDialog } from "../lib/ui";
-import { WATER_TYPE_LABELS, isActiveCustomer } from "../lib/customers";
+import { WATER_TYPE_LABELS, isActiveCustomer, ledgerLabel } from "../lib/customers";
 import { styles } from "../styles";
 import AdminUserRow from "./AdminUserRow";
 import AssistantPanel from "./AssistantPanel";
@@ -10,18 +11,20 @@ import AssistantPanel from "./AssistantPanel";
 // The admin's Home tab: the "Ask the ledger" assistant, Add customer, customer search/list beside
 // one customer's card, plus the credit/debit confirmation and full-history sheets. The list state
 // (search, filter, sort, selection) and the assistant conversation come from MainApp in `view`
-// so they survive switching tabs. The database does the searching (searchCustomers()), so only the
+// so they survive switching tabs; the selected customer comes from the URL
+// (`/admin/customers/:customerId`). The database does the searching (searchCustomers()), so only the
 // customers a search matched ever reach this screen.
 export default function AdminPanel({ view, sizeClass }) {
   const {
-    adjustGallons, fetchUserHistory, updateWaterType, setCustomerEmail, anonymizeCustomer, addCustomer,
+    adjustGallons, fetchUserHistory, correctTransaction, updateWaterType, setCustomerEmail, anonymizeCustomer, addCustomer,
     searchCustomers, getCustomer, fetchCustomerSummary,
   } = useUser();
   const {
     searchQuery, setSearchQuery, adminFilter, setAdminFilter, adminSort, setAdminSort,
-    selectedCustomerId, setSelectedCustomerId, showCustomerDetail, setShowCustomerDetail,
+    selectedCustomerId,
     assistantTurns, setAssistantTurns,
   } = view;
+  const navigate = useNavigate();
   const [pendingAdjustment, setPendingAdjustment] = useState(null); // { user, amount, note }
   const [adjustmentError, setAdjustmentError] = useState("");
   const [isAdjusting, setIsAdjusting] = useState(false);
@@ -29,6 +32,11 @@ export default function AdminPanel({ view, sizeClass }) {
   const [historyTransactions, setHistoryTransactions] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  // "Correct a mistake" in the history sheet: the entry being corrected, and its required note.
+  const [correctingId, setCorrectingId] = useState(null);
+  const [correctionNote, setCorrectionNote] = useState("");
+  const [correctionError, setCorrectionError] = useState("");
+  const [isCorrecting, setIsCorrecting] = useState(false);
   const [isAddingCustomer, setIsAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
@@ -147,15 +155,11 @@ export default function AdminPanel({ view, sizeClass }) {
     refreshData();
     setSearchQuery(String(result.customerId));
     setAdminFilter("all");
-    setSelectedCustomerId(result.customerId);
-    setShowCustomerDetail(true);
+    navigate(`/admin/customers/${result.customerId}`);
   };
   const handleAnonymizeCustomer = (user) => thenRefresh(anonymizeCustomer(user.profileId));
 
-  const openHistory = async (user) => {
-    setHistoryUser(user);
-    setHistoryTransactions([]);
-    setHistoryError("");
+  const loadHistory = async (user) => {
     setHistoryLoading(true);
     const result = await fetchUserHistory(user.profileId);
     setHistoryLoading(false);
@@ -164,6 +168,35 @@ export default function AdminPanel({ view, sizeClass }) {
       return;
     }
     setHistoryTransactions(result.transactions);
+  };
+
+  const openHistory = async (user) => {
+    setHistoryUser(user);
+    setHistoryTransactions([]);
+    setHistoryError("");
+    setCorrectingId(null);
+    await loadHistory(user);
+  };
+
+  const startCorrection = (tx) => {
+    setCorrectingId(tx.id);
+    setCorrectionNote("");
+    setCorrectionError("");
+  };
+
+  const submitCorrection = async (e) => {
+    e.preventDefault();
+    setCorrectionError("");
+    setIsCorrecting(true);
+    const result = await correctTransaction(correctingId, correctionNote.trim());
+    setIsCorrecting(false);
+    if (!result.ok) {
+      setCorrectionError(result.message || "Unable to correct this entry");
+      return;
+    }
+    setCorrectingId(null);
+    refreshData();
+    await loadHistory(historyUser);
   };
 
   return (
@@ -180,12 +213,13 @@ export default function AdminPanel({ view, sizeClass }) {
             ? selectedCustomer
             : shown.find((u) => u.id === selectedCustomerId) || null;
           const isPhone = sizeClass === "phone";
-          const showList = !isPhone || !showCustomerDetail || !selected;
-          const showDetail = !isPhone || (showCustomerDetail && selected);
+          // Phone: the list at /admin, one customer's details at /admin/customers/:id.
+          const showList = !isPhone || selectedCustomerId == null;
+          const showDetail = !isPhone || selectedCustomerId != null;
 
           const list = (
             <div id="vh2o-admin-customer-list" className="vh2o-admin-list">
-              <div id="vh2o-admin-active-summary" className="vh2o-admin-muted" style={{ textAlign: "center" }}>
+              <div id="vh2o-admin-active-summary" className="vh2o-admin-muted">
                 {summary ? `${summary.active} active / ${summary.total} total customers (${pct}%)` : "\u00a0"}
               </div>
               {isAddingCustomer ? (
@@ -271,19 +305,19 @@ export default function AdminPanel({ view, sizeClass }) {
               </div>
               <div className="vh2o-admin-rows">
                 {!canSearch ? (
-                  <p id="vh2o-admin-user-search-hint" className="vh2o-admin-muted" style={{ textAlign: "center", padding: "20px 0" }}>
+                  <p id="vh2o-admin-user-search-hint" className="vh2o-admin-muted" style={{ padding: "20px 0" }}>
                     Type at least 3 characters of a name, email, or ID to look up a customer
                   </p>
                 ) : !isCurrent ? (
-                  <p id="vh2o-admin-customer-searching" className="vh2o-admin-muted" style={{ textAlign: "center", padding: "20px 0" }}>
+                  <p id="vh2o-admin-customer-searching" className="vh2o-admin-muted" style={{ padding: "20px 0" }}>
                     Searching…
                   </p>
                 ) : results.error ? (
-                  <p id="vh2o-admin-customer-search-error" style={{ color: "var(--vh2o-danger)", textAlign: "center", padding: "20px 0" }}>
+                  <p id="vh2o-admin-customer-search-error" style={{ color: "var(--vh2o-danger)", padding: "20px 0" }}>
                     {results.error}
                   </p>
                 ) : shown.length === 0 ? (
-                  <p id="vh2o-admin-customer-empty" className="vh2o-admin-muted" style={{ textAlign: "center", padding: "20px 0" }}>
+                  <p id="vh2o-admin-customer-empty" className="vh2o-admin-muted" style={{ padding: "20px 0" }}>
                     No customers match. Try a different name or filter.
                   </p>
                 ) : shown.map((u) => {
@@ -294,10 +328,7 @@ export default function AdminPanel({ view, sizeClass }) {
                       id={`vh2o-admin-customer-row-${u.id}`}
                       className="vh2o-admin-row"
                       aria-current={!isPhone && u.id === selectedCustomerId ? "true" : undefined}
-                      {...buttonProps(() => {
-                        setSelectedCustomerId(u.id);
-                        setShowCustomerDetail(true);
-                      })}
+                      {...buttonProps(() => navigate(`/admin/customers/${u.id}`))}
                     >
                       <span className="vh2o-admin-row-name">{u.name} <span className="vh2o-admin-muted">#{u.id}</span></span>
                       <span className="vh2o-admin-row-gallons">{u.gallons.toLocaleString()} gal</span>
@@ -319,7 +350,7 @@ export default function AdminPanel({ view, sizeClass }) {
           const detail = selected ? (
             <div id="vh2o-admin-customer-detail" className="vh2o-admin-detail-panel">
               {isPhone && (
-                <button id="vh2o-admin-back-btn" type="button" className="vh2o-admin-back" onClick={() => setShowCustomerDetail(false)}>
+                <button id="vh2o-admin-back-btn" type="button" className="vh2o-admin-back" onClick={() => navigate("/admin")}>
                   <ChevronLeft size={ICON_SIZE.inline + 2} aria-hidden="true" /> All customers
                 </button>
               )}
@@ -378,10 +409,10 @@ export default function AdminPanel({ view, sizeClass }) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--vh2o-text-subtle)", letterSpacing: "1.5px", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
-              Confirm {pendingAdjustment.amount > 0 ? "Bought Today" : "Filled Today"}
+            <div style={{ ...styles.sectionTitle, marginBottom: 4 }}>
+              {pendingAdjustment.amount > 0 ? "Add gallons (bought)" : "Take off gallons (filled)"}
             </div>
-            <div id="vh2o-admin-confirm-message" style={{ fontSize: 14, color: "var(--vh2o-text)", textAlign: "center", lineHeight: 1.6 }}>
+            <div id="vh2o-admin-confirm-message" style={{ fontSize: 14, color: "var(--vh2o-text)", lineHeight: 1.6 }}>
               <strong>{pendingAdjustment.user.name}</strong> {pendingAdjustment.amount > 0 ? "bought" : "filled"} <strong>{Math.abs(pendingAdjustment.amount)} gal</strong> today
               <br />
               New balance: {pendingAdjustment.user.gallons} → {Math.max(0, pendingAdjustment.user.gallons + pendingAdjustment.amount)}
@@ -393,7 +424,7 @@ export default function AdminPanel({ view, sizeClass }) {
               )}
             </div>
             {adjustmentError && (
-              <p id="vh2o-admin-confirm-error" style={{ color: "var(--vh2o-danger)", fontSize: 12, textAlign: "center" }}>{adjustmentError}</p>
+              <p id="vh2o-admin-confirm-error" style={{ color: "var(--vh2o-danger)", fontSize: 12 }}>{adjustmentError}</p>
             )}
             <button
               id="vh2o-admin-confirm-submit"
@@ -453,33 +484,101 @@ export default function AdminPanel({ view, sizeClass }) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div id="vh2o-admin-history-title" style={{ fontSize: 12, fontWeight: 800, color: "var(--vh2o-text-subtle)", letterSpacing: "1.5px", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
-              Full History — {historyUser.name}
+            <div id="vh2o-admin-history-title" style={{ ...styles.sectionTitle, marginBottom: 4 }}>
+              Full history: {historyUser.name}
             </div>
             {historyLoading && (
-              <p style={{ color: "var(--vh2o-text-subtle)", textAlign: "center" }}>Loading…</p>
+              <p style={{ color: "var(--vh2o-text-subtle)" }}>Loading…</p>
             )}
             {historyError && (
-              <p style={{ color: "var(--vh2o-danger)", textAlign: "center" }}>{historyError}</p>
+              <p style={{ color: "var(--vh2o-danger)" }}>{historyError}</p>
             )}
             {!historyLoading && !historyError && historyTransactions.length === 0 && (
-              <p id="vh2o-admin-history-empty" style={{ color: "var(--vh2o-text-subtle)", textAlign: "center" }}>No transactions yet</p>
+              <p id="vh2o-admin-history-empty" style={{ color: "var(--vh2o-text-subtle)" }}>No transactions yet</p>
             )}
-            {!historyLoading && historyTransactions.map((tx) => (
-              <div id={`vh2o-admin-history-row-${tx.id}`} key={tx.id} style={styles.notificationCard}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ ...styles.notificationTitle, color: tx.type === "credit" ? "var(--vh2o-accent-soft)" : "var(--vh2o-danger)" }}>
-                    {tx.type === "credit"
-                      ? <Plus size={ICON_SIZE.inline} aria-hidden="true" style={{ verticalAlign: "-2px" }} />
-                      : <Minus size={ICON_SIZE.inline} aria-hidden="true" style={{ verticalAlign: "-2px" }} />}
-                    {" "}{tx.type === "credit" ? "Bought" : "Filled"} {Math.abs(tx.amount)} gal
+            {!historyLoading && (() => {
+              // Entries already reversed by a correction can't be corrected again.
+              const correctedIds = new Set(historyTransactions.map((t) => t.correctsTransactionId).filter(Boolean));
+              return historyTransactions.map((tx) => {
+                const corrected = correctedIds.has(tx.id);
+                const correctable = (tx.kind === "purchase" || tx.kind === "fill") && !corrected;
+                return (
+                  <div id={`vh2o-admin-history-row-${tx.id}`} key={tx.id} style={styles.notificationCard}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ ...styles.notificationTitle, color: tx.type === "credit" ? "var(--vh2o-accent-soft)" : "var(--vh2o-danger)" }}>
+                        {tx.type === "credit"
+                          ? <Plus size={ICON_SIZE.inline} aria-hidden="true" style={{ verticalAlign: "-2px" }} />
+                          : <Minus size={ICON_SIZE.inline} aria-hidden="true" style={{ verticalAlign: "-2px" }} />}
+                        {" "}{ledgerLabel(tx.kind, tx.amount)} {Math.abs(tx.amount)} gal
+                        {corrected && (
+                          <span id={`vh2o-admin-history-corrected-${tx.id}`} className="vh2o-status-pill is-nologin" style={{ marginLeft: 8 }}>
+                            Corrected
+                          </span>
+                        )}
+                      </div>
+                      <div style={styles.notificationTime}>{tx.displayTime}</div>
+                      <div style={styles.notificationDetails}>Balance: {tx.previousBalance} → {tx.newBalance}</div>
+                      {tx.note && <div style={{ ...styles.notificationDetails, fontStyle: "italic" }}>{tx.note}</div>}
+                      {correctable && correctingId !== tx.id && (
+                        <button
+                          id={`vh2o-admin-history-correct-btn-${tx.id}`}
+                          type="button"
+                          onClick={() => startCorrection(tx)}
+                          style={{
+                            marginTop: 6, border: "none", background: "transparent", padding: 0,
+                            color: "var(--vh2o-accent)", textDecoration: "underline", fontSize: 12,
+                            fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                          }}
+                        >
+                          Correct a mistake…
+                        </button>
+                      )}
+                      {correctingId === tx.id && (
+                        <form id={`vh2o-admin-history-correct-form-${tx.id}`} onSubmit={submitCorrection} style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                          <p style={{ margin: 0, fontSize: 12, color: "var(--vh2o-text-muted)" }}>
+                            This reverses the entry: {tx.amount > 0 ? "removes" : "gives back"} {Math.abs(tx.amount)} gallons, recorded as a correction.
+                          </p>
+                          <label htmlFor={`vh2o-admin-history-correct-note-${tx.id}`} style={{ ...styles.fieldLabel, marginBottom: 0 }}>
+                            Why? (required)
+                          </label>
+                          <input
+                            id={`vh2o-admin-history-correct-note-${tx.id}`}
+                            type="text"
+                            value={correctionNote}
+                            onChange={(e) => setCorrectionNote(e.target.value)}
+                            style={{ ...styles.input, padding: "6px", marginBottom: 0 }}
+                            required
+                          />
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              id={`vh2o-admin-history-correct-cancel-${tx.id}`}
+                              type="button"
+                              onClick={() => setCorrectingId(null)}
+                              disabled={isCorrecting}
+                              className="vh2o-chip"
+                              style={{ flex: 1 }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              id={`vh2o-admin-history-correct-submit-${tx.id}`}
+                              type="submit"
+                              disabled={isCorrecting || !correctionNote.trim()}
+                              style={{ ...styles.loginBtn, flex: 1, marginTop: 0, opacity: isCorrecting || !correctionNote.trim() ? 0.6 : 1 }}
+                            >
+                              {isCorrecting ? "Correcting…" : "Record correction"}
+                            </button>
+                          </div>
+                          {correctionError && (
+                            <p id="vh2o-admin-history-correct-error" style={{ margin: 0, color: "var(--vh2o-danger)", fontSize: 12 }}>{correctionError}</p>
+                          )}
+                        </form>
+                      )}
+                    </div>
                   </div>
-                  <div style={styles.notificationTime}>{tx.displayTime}</div>
-                  <div style={styles.notificationDetails}>Balance: {tx.previousBalance} → {tx.newBalance}</div>
-                  {tx.note && <div style={{ ...styles.notificationDetails, fontStyle: "italic" }}>{tx.note}</div>}
-                </div>
-              </div>
-            ))}
+                );
+              });
+            })()}
             <button
               id="vh2o-admin-history-close-btn"
               onClick={() => setHistoryUser(null)}

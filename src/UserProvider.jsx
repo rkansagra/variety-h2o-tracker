@@ -59,6 +59,9 @@ export function UserProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  // True when the signed-in user's recent history couldn't be loaded. Sign-in still succeeds:
+  // the profile (and balance) loaded, so the app shows it and says the history is unavailable.
+  const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   // Email of a signed-in login that no customer record matches (link_my_profile() found
   // nothing). The session is kept so "check again" works once staff save the email, and
@@ -148,20 +151,25 @@ export function UserProvider({ children }) {
         // Their 5 most recent ledger entries (the Home tab's history).
         const { data: transactions, error: transactionsError } = await supabase
           .from("gallon_transactions")
-          .select("id, user_profile_id, amount, previous_balance, new_balance, note, created_at")
+          .select("id, user_profile_id, amount, previous_balance, new_balance, note, created_at, kind, corrects_transaction_id")
           .eq("user_profile_id", matchedUser.profileId)
           .order("created_at", { ascending: false })
           .limit(5);
 
+        // A failed history read mustn't sign the user out of their own account (it did, briefly,
+        // when the app asked for columns a database migration hadn't added yet).
         if (transactionsError) {
-          throw transactionsError;
-        }
-
-        setNotifications(capNotificationsPerUser(
+          console.warn("Couldn't load recent history:", transactionsError);
+          setNotifications([]);
+          setHistoryUnavailable(true);
+        } else {
+          setHistoryUnavailable(false);
+          setNotifications(capNotificationsPerUser(
           (transactions || [])
-            .map((transaction) => mapTransactionToNotification(transaction, { [matchedUser.profileId]: matchedUser }))
-            .filter(Boolean)
-        ));
+              .map((transaction) => mapTransactionToNotification(transaction, { [matchedUser.profileId]: matchedUser }))
+              .filter(Boolean)
+          ));
+        }
 
         setUnlinkedAuthEmail(null);
         setCurrentUser(matchedUser);
@@ -531,7 +539,7 @@ export function UserProvider({ children }) {
   const fetchUserHistory = async (profileId) => {
     const { data, error } = await supabase
       .from("gallon_transactions")
-      .select("id, amount, previous_balance, new_balance, note, created_at")
+      .select("id, amount, previous_balance, new_balance, note, created_at, kind, corrects_transaction_id")
       .eq("user_profile_id", profileId)
       .order("created_at", { ascending: false })
       .limit(1000);
@@ -550,8 +558,25 @@ export function UserProvider({ children }) {
         note: transaction.note || "",
         displayTime: new Date(transaction.created_at).toLocaleString(),
         type: transaction.amount > 0 ? "credit" : "debit",
+        kind: transaction.kind || null,
+        correctsTransactionId: transaction.corrects_transaction_id ?? null,
       })),
     };
+  };
+
+  // Admin: reverses one mistaken purchase or fill. admin_correct_transaction() writes a linked
+  // 'correction' entry with the note, adjusts the balance, and refuses to go below zero or to
+  // correct an entry twice.
+  const correctTransaction = async (transactionId, note) => {
+    const { error } = await supabase.rpc("admin_correct_transaction", {
+      p_transaction_id: transactionId,
+      p_note: note,
+    });
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+    return { ok: true };
   };
 
   // Admin: adds a customer record (name and email, both required). The database assigns the
@@ -647,11 +672,13 @@ export function UserProvider({ children }) {
         logout,
         adjustGallons,
         fetchUserHistory,
+        correctTransaction,
         setCustomerEmail,
         anonymizeCustomer,
         askAssistant,
         updateWaterType,
         notifications,
+        historyUnavailable,
         addCustomer,
         searchCustomers,
         getCustomer,

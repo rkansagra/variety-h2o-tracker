@@ -5,6 +5,12 @@ import { App as CapacitorApp } from '@capacitor/app'
 import { ScreenOrientation } from '@capacitor/screen-orientation'
 import './index.css'
 import RewardsApp from './App.jsx'
+import CrashScreen from './components/CrashScreen.jsx'
+import { ErrorBoundary, initErrorReporting } from './lib/errorReporting.js'
+
+// Before anything else runs, so errors from the start are reported (production builds with
+// VITE_SENTRY_DSN set only; see lib/errorReporting.js).
+initErrorReporting({ platform: Capacitor.getPlatform(), release: import.meta.env.VITE_RELEASE || undefined })
 
 // Phones stay portrait; tablets (shortest screen side >= 600dp, the same line as the app's tablet
 // size class) rotate freely. The Android manifest no longer forces portrait, so this is the only
@@ -61,6 +67,8 @@ if (import.meta.hot) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <RewardsApp />
+    <ErrorBoundary fallback={<CrashScreen />}>
+      <RewardsApp />
+    </ErrorBoundary>
   </StrictMode>,
 )

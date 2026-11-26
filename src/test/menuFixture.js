@@ -1,4 +1,7 @@
-import bottlesIcon from '../assets/bottles.png';
+// Test fixture: the menu as it was before it moved into the database (ROADMAP item E), the same
+// data supabase/seed/menu.sql was generated from. MENU_FIXTURE and STORE_FIXTURE give it in the
+// shape MenuProvider shares, so screen tests see the real categories, items, and prices.
+const bottlesIcon = "bottles";
 
 // Per-category flat pricing (same price for every item in the category, matching what's
 // actually charged at the register per the Square catalog) for categories offered in
@@ -295,3 +298,38 @@ export const MENU_CATEGORIES = [
     ],
   },
 ];
+
+// MenuProvider's value for tests: the categories in order, each with its items, as mapMenu() makes.
+export const MENU_FIXTURE = MENU_CATEGORIES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  icon: c.icon,
+  imageKey: c.iconSrc ? "bottles" : null,
+  color: c.color,
+  sizeTiers: CATEGORY_SIZE_TIERS[c.id] ?? null,
+  items: c.items.map((item, i) => ({
+    id: `${c.id}-${i}`,
+    categoryId: c.id,
+    name: item.name,
+    price: item.flatPrice ?? item.price ?? null,
+    unit: item.unit || "",
+    description: item.description || "",
+    sizeTiers: item.customTiers ?? null,
+    sortOrder: (i + 1) * 10,
+    hidden: false,
+  })),
+}));
+
+export const STORE_FIXTURE = {
+  addressLines: ["6330 E Golf Links Rd #A138", "Tucson, AZ 85730"],
+  phone: { display: "(520) 812-1532", tel: "tel:+15208121532" },
+  hours: [{ days: "Mon – Sat", hours: "10am – 7pm" }, { days: "Sun", hours: "12pm – 5pm" }],
+  tagline: "Diligently Purified for an Impeccable Taste",
+  welcome: "We are a family-owned and operated water purification and desserts shop! Come try all of our purified waters: RO, Re-mineralized, and Alkaline!",
+  orderUrl: "https://order.online/business/variety-h2o-ice-cream-461440",
+  facebookUrl: "https://www.facebook.com/VarietyWaterPlusIceCream/",
+  mapsGoogleUrl: "https://maps.app.goo.gl/u6AER73Amus6L5me6",
+  mapsAppleUrl: "https://maps.apple/p/zxEvbrjs8z53N7",
+};
+
+export const MENU_CONTEXT_FIXTURE = { status: "live", categories: MENU_FIXTURE, store: STORE_FIXTURE, cachedAt: null };

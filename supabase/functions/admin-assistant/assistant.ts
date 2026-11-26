@@ -131,8 +131,9 @@ export const TOOLS: Record<string, ToolSpec> = {
   customer_history: {
     rpc: "assistant_customer_history",
     description:
-      "One customer's ledger entries, newest first (store time). Negative amounts are fills, positive are " +
-      "purchases. Look the customer up first to get their customer number.",
+      "One customer's ledger entries, newest first (store time). kind is purchase, fill, correction (reverses " +
+      "an earlier mistaken entry), or forfeit (balance given up when the account was deleted). Look the " +
+      "customer up first to get their customer number.",
     input_schema: {
       type: "object",
       properties: {
@@ -175,7 +176,8 @@ export function systemPrompt(now: Date): string {
   return [
     "You answer questions from the owners of Variety H2O + Ice Cream, a water and ice cream store in Tucson, AZ,",
     "about their prepaid-gallons customer ledger. Customers prepay for gallons of water (purchases) and use them",
-    "on later visits (fills). A visit is one customer on one store-local day with at least one ledger entry.",
+    "on later visits (fills). A visit is one customer on one store-local day with at least one purchase or fill",
+    "that wasn't later corrected; corrections and forfeits aren't visits.",
     `Today is ${today.weekday}, ${today.date} (store time, ${STORE_TIME_ZONE}).`,
     "",
     "Rules:",

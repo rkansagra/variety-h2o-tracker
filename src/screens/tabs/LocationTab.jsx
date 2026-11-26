@@ -1,111 +1,103 @@
 import { useState } from "react";
 import { Clock, ExternalLink, Map as MapIcon, MapPin, Navigation, Phone, ShoppingCart, ThumbsUp } from "lucide-react";
 import { ICON_SIZE, buttonProps, useDialog } from "../../lib/ui";
-import { STORE_ADDRESS_LINES, STORE_HOURS, STORE_PHONE } from "../../lib/store";
+import { useMenu } from "../../menuContext";
 import { styles } from "../../styles";
 
-// Location tab: address, phone, hours, and links, plus the map-app and call sheets.
+// Location tab: address, phone, hours, and links, plus the map-app and call sheets. The details
+// come from store_info through MenuProvider (ROADMAP item E), so the admin can edit them.
 export default function LocationTab() {
+  const { store, status } = useMenu();
   const [showMapOptions, setShowMapOptions] = useState(false);
   const [showCallOptions, setShowCallOptions] = useState(false);
   const mapSheetRef = useDialog(showMapOptions, () => setShowMapOptions(false));
   const callSheetRef = useDialog(showCallOptions, () => setShowCallOptions(false));
 
+  if (!store) {
+    return (
+      <div id="vh2o-locations-section" style={styles.rewardsList}>
+        <p id={`vh2o-locations-${status === "loading" ? "loading" : "unavailable"}`} style={{ color: "var(--vh2o-text-subtle)", marginTop: 20 }}>
+          {status === "loading" ? "Loading…" : "The store details can't be loaded right now. Please try again in a moment."}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div id="vh2o-locations-section" style={styles.rewardsList}>
-        <div id="vh2o-locations-title" style={styles.sectionTitle}>Store Location</div>
+        <h1 id="vh2o-locations-title" style={styles.pageTitle}>Visit us</h1>
 
         <div id="vh2o-locations-cards" className="vh2o-location-cards">
-        {/* Clickable address card */}
         <div
           id="vh2o-locations-address-card"
-          style={{
-            ...styles.rewardCard,
-            flexDirection: "column",
-            alignItems: "center",
-            cursor: "pointer",
-            border: "1px solid rgba(56,189,248,0.3)",
-            gap: 6,
-          }}
+          style={{ ...styles.rewardCard, cursor: "pointer" }}
           {...buttonProps(() => setShowMapOptions(true))}
           aria-haspopup="dialog"
         >
-          <MapPin size={ICON_SIZE.lg} color="#38bdf8" aria-hidden="true" />
-          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--vh2o-text)", textAlign: "center" }}>
-            Variety H2O + Ice Cream
+          <div aria-hidden="true" style={styles.rewardIcon}><MapPin size={ICON_SIZE.md} /></div>
+          <div style={styles.rewardInfo}>
+            <div style={styles.rewardName}>{store.addressLines[0]}</div>
+            {store.addressLines.slice(1).map((line, i) => <div key={i} style={{ fontSize: 15, color: "var(--vh2o-text-muted)" }}>{line}</div>)}
+            <div style={{ ...styles.rewardDesc, color: "var(--vh2o-accent-soft)", fontWeight: 700, marginTop: 4 }}>Get directions</div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-accent)", textAlign: "center", lineHeight: 1.6 }}>
-            {STORE_ADDRESS_LINES[0]}<br />
-            {STORE_ADDRESS_LINES[1]}
-          </div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>
-            Tap to open in maps <ExternalLink size={ICON_SIZE.inline - 2} aria-hidden="true" style={{ verticalAlign: "-1px" }} />
-          </div>
+          <ExternalLink size={ICON_SIZE.inline} aria-hidden="true" color="var(--vh2o-text-subtle)" />
         </div>
 
         <div
           id="vh2o-locations-call-card"
-          style={{
-            ...styles.rewardCard,
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 4,
-            cursor: "pointer",
-            border: "1px solid rgba(52,211,153,0.3)",
-          }}
+          style={{ ...styles.rewardCard, cursor: "pointer" }}
           {...buttonProps(() => setShowCallOptions(true))}
           aria-haspopup="dialog"
         >
-          <Phone size={ICON_SIZE.md} color="#34d399" aria-hidden="true" />
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)" }}>{STORE_PHONE.display}</div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Tap to call <ExternalLink size={ICON_SIZE.inline - 2} aria-hidden="true" style={{ verticalAlign: "-1px" }} /></div>
+          <div aria-hidden="true" style={styles.rewardIcon}><Phone size={ICON_SIZE.md} /></div>
+          <div style={styles.rewardInfo}>
+            <div style={styles.rewardName}>{store.phone.display}</div>
+            <div style={styles.rewardDesc}>Tap to call</div>
+          </div>
         </div>
 
-        <div id="vh2o-locations-hours-card" style={{ ...styles.rewardCard, flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <Clock size={ICON_SIZE.md} color="#94a3b8" aria-hidden="true" />
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)" }}>Hours</div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", textAlign: "center", lineHeight: 1.6 }}>
-            {STORE_HOURS.map(({ days, hours }) => <div key={days}>{days}: {hours}</div>)}
+        <div id="vh2o-locations-hours-card" style={{ ...styles.rewardCard, alignItems: "flex-start" }}>
+          <div aria-hidden="true" style={styles.rewardIcon}><Clock size={ICON_SIZE.md} /></div>
+          <div style={{ ...styles.rewardInfo, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={styles.rewardName}>Hours</div>
+            {store.hours.map(({ days, hours }, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 15 }}>
+                <span style={{ color: "var(--vh2o-text-muted)" }}>{days}</span>
+                <span style={{ color: "var(--vh2o-text)", fontWeight: 700 }}>{hours}</span>
+              </div>
+            ))}
           </div>
         </div>
 
         <a
           id="vh2o-locations-order-now-card"
-          href="https://order.online/business/variety-h2o-ice-cream-461440"
+          href={store.orderUrl}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            ...styles.rewardCard,
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 4,
-            border: "1px solid rgba(251,146,60,0.3)",
-            textDecoration: "none",
-          }}
+          style={{ ...styles.rewardCard, textDecoration: "none" }}
         >
-          <ShoppingCart size={ICON_SIZE.md} color="#fb923c" aria-hidden="true" />
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)" }}>Order Online</div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Opens order.online <ExternalLink size={ICON_SIZE.inline - 2} aria-hidden="true" style={{ verticalAlign: "-1px" }} /></div>
+          <div aria-hidden="true" style={styles.rewardIcon}><ShoppingCart size={ICON_SIZE.md} /></div>
+          <div style={styles.rewardInfo}>
+            <div style={styles.rewardName}>Order online</div>
+            <div style={styles.rewardDesc}>Opens order.online</div>
+          </div>
+          <ExternalLink size={ICON_SIZE.inline} aria-hidden="true" color="var(--vh2o-text-subtle)" />
         </a>
 
         <a
           id="vh2o-locations-facebook-card"
-          href="https://www.facebook.com/VarietyWaterPlusIceCream/"
+          href={store.facebookUrl}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            ...styles.rewardCard,
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 4,
-            border: "1px solid rgba(59,130,246,0.3)",
-            textDecoration: "none",
-          }}
+          style={{ ...styles.rewardCard, textDecoration: "none" }}
         >
-          <ThumbsUp size={ICON_SIZE.md} color="#60a5fa" aria-hidden="true" />
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)" }}>Follow Us on Facebook</div>
-          <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Opens Facebook <ExternalLink size={ICON_SIZE.inline - 2} aria-hidden="true" style={{ verticalAlign: "-1px" }} /></div>
+          <div aria-hidden="true" style={styles.rewardIcon}><ThumbsUp size={ICON_SIZE.md} /></div>
+          <div style={styles.rewardInfo}>
+            <div style={styles.rewardName}>Follow us on Facebook</div>
+            <div style={styles.rewardDesc}>Opens Facebook</div>
+          </div>
+          <ExternalLink size={ICON_SIZE.inline} aria-hidden="true" color="var(--vh2o-text-subtle)" />
         </a>
         </div>
       </div>
@@ -140,24 +132,24 @@ export default function LocationTab() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--vh2o-text-subtle)", letterSpacing: "1.5px", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
-              Open Address In…
+            <div style={{ ...styles.sectionTitle, marginBottom: 4 }}>
+              Open the address in
             </div>
             <a
               id="vh2o-map-options-google-link"
-              href="https://maps.app.goo.gl/u6AER73Amus6L5me6"
+              href={store.mapsGoogleUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: "flex", alignItems: "center", gap: 14,
-                background: "rgba(255,255,255,0.06)",
+                background: "var(--vh2o-surface)",
                 border: "1px solid var(--vh2o-border-strong)",
                 borderRadius: 14, padding: "14px 16px",
                 textDecoration: "none", color: "var(--vh2o-text)",
               }}
               onClick={() => setShowMapOptions(false)}
             >
-              <MapIcon size={ICON_SIZE.lg} color="#38bdf8" aria-hidden="true" />
+              <MapIcon size={ICON_SIZE.lg} color="var(--vh2o-accent)" aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Google Maps</div>
                 <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Open in browser or app</div>
@@ -165,19 +157,19 @@ export default function LocationTab() {
             </a>
             <a
               id="vh2o-map-options-apple-link"
-              href="https://maps.apple/p/zxEvbrjs8z53N7"
+              href={store.mapsAppleUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
                 display: "flex", alignItems: "center", gap: 14,
-                background: "rgba(255,255,255,0.06)",
+                background: "var(--vh2o-surface)",
                 border: "1px solid var(--vh2o-border-strong)",
                 borderRadius: 14, padding: "14px 16px",
                 textDecoration: "none", color: "var(--vh2o-text)",
               }}
               onClick={() => setShowMapOptions(false)}
             >
-              <Navigation size={ICON_SIZE.lg} color="#38bdf8" aria-hidden="true" />
+              <Navigation size={ICON_SIZE.lg} color="var(--vh2o-accent)" aria-hidden="true" />
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Apple Maps</div>
                 <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Open in Maps app</div>
@@ -230,24 +222,24 @@ export default function LocationTab() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--vh2o-text-subtle)", letterSpacing: "1.5px", textTransform: "uppercase", textAlign: "center", marginBottom: 4 }}>
-              Contact Us
+            <div style={{ ...styles.sectionTitle, marginBottom: 4 }}>
+              Call the store
             </div>
             <a
               id="vh2o-call-options-link"
-              href={STORE_PHONE.tel}
+              href={store.phone.tel}
               style={{
                 display: "flex", alignItems: "center", gap: 14,
-                background: "rgba(52,211,153,0.08)",
-                border: "1px solid rgba(52,211,153,0.25)",
+                background: "var(--vh2o-surface)",
+                border: "1px solid var(--vh2o-border-strong)",
                 borderRadius: 14, padding: "14px 16px",
                 textDecoration: "none", color: "var(--vh2o-text)",
               }}
               onClick={() => setShowCallOptions(false)}
             >
-              <Phone size={ICON_SIZE.lg} color="#34d399" aria-hidden="true" />
+              <Phone size={ICON_SIZE.lg} color="var(--vh2o-accent)" aria-hidden="true" />
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>Call {STORE_PHONE.display}</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>Call {store.phone.display}</div>
                 <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", marginTop: 2 }}>Variety H2O + Ice Cream</div>
               </div>
             </a>

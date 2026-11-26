@@ -38,18 +38,18 @@ values
   -- An anonymized customer whose balance was forfeited.
   ('00000000-0000-4000-a000-000000000104', null, null, 'user', 'Deleted customer', 990104, 0, null, '2021-03-02 18:00+00', '2021-03-02 18:00+00');
 
-insert into public.gallon_transactions (user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note, created_at)
+insert into public.gallon_transactions (user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note, created_at, kind)
 values
   -- 2021-03-01 (a Monday): Ana buys 20 and fills 5 (one visit); Ben fills 3.
-  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', 20, 0, 20, null, '2021-03-01 17:00+00'),
-  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', -5, 20, 15, null, '2021-03-01 17:05+00'),
-  ('00000000-0000-4000-a000-000000000102', '00000000-0000-4000-a000-000000000001', -3, 10, 7, null, '2021-03-01 20:00+00'),
+  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', 20, 0, 20, null, '2021-03-01 17:00+00', 'purchase'),
+  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', -5, 20, 15, null, '2021-03-01 17:05+00', 'fill'),
+  ('00000000-0000-4000-a000-000000000102', '00000000-0000-4000-a000-000000000001', -3, 10, 7, null, '2021-03-01 20:00+00', 'fill'),
   -- 06:30 UTC on 03-03 is 23:30 on 03-02 in Tucson, so this is a 03-02 visit.
-  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', -5, 15, 10, 'Filled today', '2021-03-03 06:30+00'),
+  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', -5, 15, 10, 'Filled today', '2021-03-03 06:30+00', 'fill'),
   -- Forfeit on 03-02: not a visit.
-  ('00000000-0000-4000-a000-000000000104', '00000000-0000-4000-a000-000000000001', -4, 4, 0, 'Balance forfeited: account deleted', '2021-03-02 18:00+00'),
+  ('00000000-0000-4000-a000-000000000104', '00000000-0000-4000-a000-000000000001', -4, 4, 0, 'Balance forfeited: account deleted', '2021-03-02 18:00+00', 'forfeit'),
   -- Ana, 3 days ago.
-  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', 5, 5, 10, null, now() - interval '3 days');
+  ('00000000-0000-4000-a000-000000000101', '00000000-0000-4000-a000-000000000001', 5, 5, 10, null, now() - interval '3 days', 'purchase');
 
 -- ---------- Static checks: every assistant function is read-only, runs as the caller, and
 -- can't be called logged out ----------

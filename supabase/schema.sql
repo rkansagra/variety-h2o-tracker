@@ -14,7 +14,7 @@ create table if not exists public.profiles (
   role text not null default 'user' check (role in ('admin', 'user')),
   gallons integer not null default 0 check (gallons >= 0),
   name text not null,
-  member_since text,
+  member_since date,
   legacy_id integer unique not null,
   -- Informational only (pricing/tiers are handled by staff at the register, not the app).
   water_type text check (water_type is null or water_type in ('purified', 'remineralized', 'alkaline')),
@@ -32,6 +32,18 @@ alter table public.profiles add column if not exists last_transaction_at timesta
 -- Set by admin_anonymize_customer(); starts the 3-year clock for purging the row and its
 -- transactions (see /delete-account/).
 alter table public.profiles add column if not exists anonymized_at timestamptz;
+
+-- member_since is a date (ROADMAP item C); null means unknown, which the app hides. Earlier
+-- versions stored free text ("N/A" or a browser-formatted date): anything that isn't an ISO date
+-- becomes null.
+do $$
+begin
+  if (select data_type from information_schema.columns
+      where table_schema = 'public' and table_name = 'profiles' and column_name = 'member_since') = 'text' then
+    alter table public.profiles alter column member_since type date
+      using case when member_since ~ '^\d{4}-\d{2}-\d{2}$' then member_since::date end;
+  end if;
+end $$;
 alter table public.profiles drop constraint if exists profiles_water_type_check;
 alter table public.profiles add constraint profiles_water_type_check
   check (water_type is null or water_type in ('purified', 'remineralized', 'alkaline'));
@@ -72,6 +84,32 @@ create table if not exists public.gallon_transactions (
 
 alter table public.gallon_transactions add column if not exists note text;
 
+-- Each entry says what it is (ROADMAP item C) instead of leaving it to the sign of amount:
+-- purchase (+), fill (-), forfeit (-, the leftover balance when an account is deleted), and
+-- correction (reverses one purchase or fill, linked by corrects_transaction_id; written only by
+-- admin_correct_transaction()). Older rows get their kind from the sign and the forfeit note.
+alter table public.gallon_transactions add column if not exists kind text;
+alter table public.gallon_transactions
+  add column if not exists corrects_transaction_id bigint references public.gallon_transactions (id);
+update public.gallon_transactions
+set kind = case
+  when note = 'Balance forfeited: account deleted' then 'forfeit'
+  when amount > 0 then 'purchase'
+  else 'fill'
+end
+where kind is null;
+alter table public.gallon_transactions alter column kind set not null;
+alter table public.gallon_transactions drop constraint if exists gallon_transactions_kind_check;
+alter table public.gallon_transactions add constraint gallon_transactions_kind_check check (
+  (kind = 'purchase' and amount > 0 and corrects_transaction_id is null)
+  or (kind = 'fill' and amount < 0 and corrects_transaction_id is null)
+  or (kind = 'forfeit' and amount < 0 and corrects_transaction_id is null)
+  or (kind = 'correction' and amount <> 0 and corrects_transaction_id is not null)
+);
+-- An entry can be corrected once.
+create unique index if not exists gallon_transactions_corrects_once
+  on public.gallon_transactions (corrects_transaction_id) where corrects_transaction_id is not null;
+
 create or replace function public.set_profiles_updated_at()
 returns trigger
 language plpgsql
@@ -93,9 +131,7 @@ execute function public.set_profiles_updated_at();
 -- customer can't probe which accounts are admins. Every caller in this file passes auth.uid().
 -- coalesce() matters: with no session, `uid = auth.uid()` is NULL, and `if not NULL` would
 -- skip the admin checks in the functions below instead of raising.
--- No MFA requirement: several owners share the admin login across their own devices, so a
--- single authenticator app doesn't fit (MFA from PR #37 was removed 2026-11-24, by the owners'
--- choice). Admin access is the admin password alone.
+-- No MFA requirement (MFA from PR #37 was removed 2026-11-24, by the owners' choice).
 create or replace function public.is_admin(uid uuid)
 returns boolean
 language sql
@@ -217,9 +253,10 @@ begin
   returning * into updated_profile;
 
   insert into public.gallon_transactions (
-    user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note
+    user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note, kind
   ) values (
-    target_profile_id, caller_profile_id, delta, current_balance, computed_balance, nullif(trim(note), '')
+    target_profile_id, caller_profile_id, delta, current_balance, computed_balance, nullif(trim(note), ''),
+    case when delta > 0 then 'purchase' else 'fill' end
   );
 
   return updated_profile;
@@ -228,6 +265,78 @@ $$;
 
 revoke all on function public.admin_adjust_gallons(uuid, integer, text) from public;
 grant execute on function public.admin_adjust_gallons(uuid, integer, text) to authenticated;
+
+-- Admin-only: reverses one mistaken purchase or fill (say, 50 gallons rung up instead of 5) with a
+-- 'correction' entry linked to it and a required note saying why. Like admin_adjust_gallons(), it
+-- locks the customer's row, won't take the balance below zero, and writes the balance and the
+-- entry together. A correction isn't a visit, so last_transaction_at is left alone. Each entry can
+-- be corrected once; corrections and forfeits can't be corrected.
+create or replace function public.admin_correct_transaction(p_transaction_id bigint, p_note text)
+returns public.profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_profile_id uuid;
+  original public.gallon_transactions;
+  current_balance integer;
+  computed_balance integer;
+  clean_note text := nullif(trim(p_note), '');
+  updated_profile public.profiles;
+begin
+  if not public.is_admin(auth.uid()) then
+    raise exception 'Only admins can correct entries';
+  end if;
+  if clean_note is null then
+    raise exception 'Say why the entry is being corrected';
+  end if;
+
+  select * into original from public.gallon_transactions where id = p_transaction_id;
+  if not found then
+    raise exception 'Ledger entry not found';
+  end if;
+  if original.kind not in ('purchase', 'fill') then
+    raise exception 'Only a purchase or a fill can be corrected';
+  end if;
+
+  select id into caller_profile_id from public.profiles where auth_user_id = auth.uid();
+
+  -- Lock the customer first, as admin_adjust_gallons() does, then check for an earlier correction.
+  select gallons into current_balance
+  from public.profiles
+  where id = original.user_profile_id and anonymized_at is null
+  for update;
+  if not found then
+    raise exception 'This customer''s data was deleted';
+  end if;
+  if exists (select 1 from public.gallon_transactions where corrects_transaction_id = original.id) then
+    raise exception 'This entry was already corrected';
+  end if;
+
+  computed_balance := current_balance - original.amount;
+  if computed_balance < 0 then
+    raise exception 'Can''t correct: the balance would go below zero (the customer has % gallons)', current_balance;
+  end if;
+
+  update public.profiles
+  set gallons = computed_balance
+  where id = original.user_profile_id
+  returning * into updated_profile;
+
+  insert into public.gallon_transactions (
+    user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note, kind, corrects_transaction_id
+  ) values (
+    original.user_profile_id, caller_profile_id, -original.amount, current_balance, computed_balance, clean_note,
+    'correction', original.id
+  );
+
+  return updated_profile;
+end;
+$$;
+
+revoke all on function public.admin_correct_transaction(bigint, text) from public, anon;
+grant execute on function public.admin_correct_transaction(bigint, text) to authenticated;
 
 -- The app only ever runs as the `authenticated` role (a signed-in user) or unauthenticated
 -- for the public Menu/Locations tabs, which touch neither table. Lock the anon (logged-out)
@@ -314,7 +423,7 @@ begin
   ));
 
   insert into public.profiles (name, email, member_since)
-  values (clean_name, clean_email, to_char(now() at time zone 'America/Phoenix', 'FMMonth YYYY'))
+  values (clean_name, clean_email, (now() at time zone 'America/Phoenix')::date)
   returning * into created;
 
   return created;
@@ -487,9 +596,9 @@ begin
 
   if target.gallons > 0 then
     insert into public.gallon_transactions (
-      user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note
+      user_profile_id, actor_profile_id, amount, previous_balance, new_balance, note, kind
     ) values (
-      target.id, caller_profile_id, -target.gallons, target.gallons, 0, 'Balance forfeited: account deleted'
+      target.id, caller_profile_id, -target.gallons, target.gallons, 0, 'Balance forfeited: account deleted', 'forfeit'
     );
   end if;
 
@@ -518,6 +627,8 @@ grant execute on function public.admin_anonymize_customer(uuid) to authenticated
 -- browser only ever holds the customers a search matched, never the whole list. All three are
 -- read-only (STABLE) and SECURITY INVOKER, so RLS applies on top of the admin check. Active means
 -- a visit (ledger entry) in the last 60 days, the same rule as the assistant and the app.
+-- member_since changed type (item C), and a function's result type can't change in place.
+drop function if exists public.admin_search_customers(text, text, text, integer);
 create or replace function public.admin_search_customers(
   p_query text,
   p_filter text default 'all',
@@ -532,7 +643,7 @@ returns table (
   gallons integer,
   water_type text,
   has_login boolean,
-  member_since text,
+  member_since date,
   last_transaction_at timestamptz,
   anonymized_at timestamptz,
   total_matches bigint
@@ -600,6 +711,7 @@ $$;
 
 -- One customer record, for the details panel (by customer number, which is what the panel keeps
 -- selected across tabs). Same columns as a search row.
+drop function if exists public.admin_get_customer(integer);
 create or replace function public.admin_get_customer(p_legacy_id integer)
 returns table (
   id uuid,
@@ -609,7 +721,7 @@ returns table (
   gallons integer,
   water_type text,
   has_login boolean,
-  member_since text,
+  member_since date,
   last_transaction_at timestamptz,
   anonymized_at timestamptz
 )
@@ -659,6 +771,206 @@ grant execute on function public.admin_search_customers(text, text, text, intege
 grant execute on function public.admin_get_customer(integer) to authenticated;
 grant execute on function public.admin_customer_summary() to authenticated;
 
+-- Menu, prices, and store info (ROADMAP item E). Anyone can read them (the menu and Location
+-- screens work signed out); only the admin can change them, and only the columns meant to be
+-- edited. Categories themselves (names, order, icons, colors) stay as they are seeded: the admin
+-- edits a category's size prices, not the category. Every edit made from the app is recorded in
+-- menu_changes by a trigger, so it can't be skipped. supabase/seed/menu.sql loads the starting
+-- menu (from the shop's POS catalog).
+
+-- A size list: a JSON array of {key, label, price} with a non-empty key and label and a price of
+-- 0 or more with at most 2 decimals. Null means "no sizes".
+create or replace function public.valid_size_tiers(tiers jsonb)
+returns boolean
+language sql
+immutable
+set search_path = public
+as $$
+  select tiers is null or (
+    jsonb_typeof(tiers) = 'array'
+    and jsonb_array_length(tiers) between 1 and 6
+    and not exists (
+      select 1 from jsonb_array_elements(tiers) t
+      where jsonb_typeof(t) <> 'object'
+         or coalesce(trim(t ->> 'key'), '') = ''
+         or coalesce(trim(t ->> 'label'), '') = ''
+         or jsonb_typeof(t -> 'price') <> 'number'
+         or (t ->> 'price')::numeric < 0
+         or (t ->> 'price')::numeric <> round((t ->> 'price')::numeric, 2)
+    )
+  );
+$$;
+
+create table if not exists public.menu_categories (
+  id text primary key check (id ~ '^[a-z0-9-]+$'),
+  name text not null,
+  icon text not null,
+  -- A bundled image shown instead of the emoji (e.g. 'bottles'), or null.
+  image_key text,
+  color text not null check (color ~ '^#[0-9a-fA-F]{6}$'),
+  sort_order integer not null,
+  -- Sizes every item in the category comes in (e.g. Small/Large), unless an item has its own price
+  -- or sizes.
+  size_tiers jsonb check (public.valid_size_tiers(size_tiers)),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.menu_items (
+  id bigint generated always as identity primary key,
+  category_id text not null references public.menu_categories (id),
+  name text not null check (length(trim(name)) > 0),
+  -- One price for the item. Null means it comes in sizes: its own size_tiers, or its category's.
+  price numeric(8, 2) check (price >= 0),
+  unit text,
+  description text,
+  size_tiers jsonb check (public.valid_size_tiers(size_tiers)),
+  sort_order integer not null default 0,
+  hidden boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+create index if not exists menu_items_category_idx on public.menu_items (category_id, sort_order);
+
+-- The shop's details, as one row.
+create table if not exists public.store_info (
+  id boolean primary key default true check (id),
+  address_line1 text not null,
+  address_line2 text not null,
+  phone_display text not null,
+  phone_tel text not null check (phone_tel ~ '^tel:\+[0-9]{8,15}$'),
+  -- [{days, hours}], e.g. [{"days": "Mon - Sat", "hours": "10am - 7pm"}]
+  hours jsonb not null check (
+    jsonb_typeof(hours) = 'array' and jsonb_array_length(hours) between 1 and 7
+  ),
+  tagline text,
+  welcome text,
+  order_url text check (order_url is null or order_url ~ '^https://'),
+  facebook_url text check (facebook_url is null or facebook_url ~ '^https://'),
+  maps_google_url text check (maps_google_url is null or maps_google_url ~ '^https://'),
+  maps_apple_url text check (maps_apple_url is null or maps_apple_url ~ '^https://'),
+  updated_at timestamptz not null default now()
+);
+
+-- Every menu or store-info edit made from the app: what changed, the old and new values, when,
+-- and who. Written only by the trigger below (no client can insert, change, or delete a row).
+-- Edits made directly in SQL (migrations, the seed) have no signed-in user and aren't logged.
+create table if not exists public.menu_changes (
+  id bigint generated always as identity primary key,
+  changed_at timestamptz not null default now(),
+  changed_by uuid references public.profiles (id) on delete set null,
+  table_name text not null,
+  row_key text not null,
+  action text not null check (action in ('insert', 'update', 'delete')),
+  old_values jsonb,
+  new_values jsonb
+);
+create index if not exists menu_changes_changed_at_idx on public.menu_changes (changed_at desc);
+
+create or replace function public.touch_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.log_menu_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  old_row jsonb := case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) - 'updated_at' end;
+  new_row jsonb := case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) - 'updated_at' end;
+begin
+  if auth.uid() is null then
+    return null;
+  end if;
+  -- An update that changes nothing isn't worth a row.
+  if tg_op = 'UPDATE' and old_row = new_row then
+    return null;
+  end if;
+  insert into public.menu_changes (changed_by, table_name, row_key, action, old_values, new_values)
+  values (
+    (select id from public.profiles where auth_user_id = auth.uid()),
+    tg_table_name,
+    coalesce(new_row ->> 'id', old_row ->> 'id'),
+    lower(tg_op),
+    old_row,
+    new_row
+  );
+  return null;
+end;
+$$;
+
+revoke all on function public.log_menu_change() from public, anon, authenticated;
+revoke all on function public.touch_updated_at() from public, anon, authenticated;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['menu_categories', 'menu_items', 'store_info'] loop
+    execute format('drop trigger if exists trg_%1$s_touch on public.%1$I', t);
+    execute format('create trigger trg_%1$s_touch before update on public.%1$I for each row execute function public.touch_updated_at()', t);
+    execute format('drop trigger if exists trg_%1$s_log on public.%1$I', t);
+    execute format('create trigger trg_%1$s_log after insert or update or delete on public.%1$I for each row execute function public.log_menu_change()', t);
+  end loop;
+end $$;
+
+alter table public.menu_categories enable row level security;
+alter table public.menu_items enable row level security;
+alter table public.store_info enable row level security;
+alter table public.menu_changes enable row level security;
+
+-- Reading: everyone. Hidden items only for the admin. (anon has no EXECUTE on is_admin(), so
+-- signed-out visitors get their own policy that never calls it.)
+drop policy if exists "menu_categories_read" on public.menu_categories;
+create policy "menu_categories_read" on public.menu_categories for select to anon, authenticated using (true);
+drop policy if exists "store_info_read" on public.store_info;
+create policy "store_info_read" on public.store_info for select to anon, authenticated using (true);
+drop policy if exists "menu_items_read_public" on public.menu_items;
+create policy "menu_items_read_public" on public.menu_items for select to anon using (not hidden);
+drop policy if exists "menu_items_read" on public.menu_items;
+create policy "menu_items_read" on public.menu_items for select to authenticated
+  using (not hidden or public.is_admin((select auth.uid())));
+drop policy if exists "menu_changes_read" on public.menu_changes;
+create policy "menu_changes_read" on public.menu_changes for select to authenticated
+  using (public.is_admin((select auth.uid())));
+
+-- Writing: the admin only.
+drop policy if exists "menu_categories_update" on public.menu_categories;
+create policy "menu_categories_update" on public.menu_categories for update to authenticated
+  using (public.is_admin((select auth.uid()))) with check (public.is_admin((select auth.uid())));
+drop policy if exists "menu_items_insert" on public.menu_items;
+create policy "menu_items_insert" on public.menu_items for insert to authenticated
+  with check (public.is_admin((select auth.uid())));
+drop policy if exists "menu_items_update" on public.menu_items;
+create policy "menu_items_update" on public.menu_items for update to authenticated
+  using (public.is_admin((select auth.uid()))) with check (public.is_admin((select auth.uid())));
+drop policy if exists "menu_items_delete" on public.menu_items;
+create policy "menu_items_delete" on public.menu_items for delete to authenticated
+  using (public.is_admin((select auth.uid())));
+drop policy if exists "store_info_update" on public.store_info;
+create policy "store_info_update" on public.store_info for update to authenticated
+  using (public.is_admin((select auth.uid()))) with check (public.is_admin((select auth.uid())));
+
+-- Grants, column by column (RLS decides who; these decide what). Revoking first makes this file
+-- re-run cleanly, and a new column stays unwritable until it's added here.
+revoke all on public.menu_categories, public.menu_items, public.store_info, public.menu_changes from anon, authenticated;
+grant select on public.menu_categories, public.menu_items, public.store_info to anon, authenticated;
+grant select on public.menu_changes to authenticated;
+-- Categories: only their size prices are edited from the app.
+grant update (size_tiers) on public.menu_categories to authenticated;
+grant insert (category_id, name, price, unit, description, size_tiers, sort_order, hidden) on public.menu_items to authenticated;
+grant update (category_id, name, price, unit, description, size_tiers, sort_order, hidden) on public.menu_items to authenticated;
+grant delete on public.menu_items to authenticated;
+grant update (address_line1, address_line2, phone_display, phone_tel, hours, tagline, welcome,
+  order_url, facebook_url, maps_google_url, maps_apple_url) on public.store_info to authenticated;
+
 -- "Ask the ledger" assistant tools (ROADMAP item 3). The admin-assistant Edge Function lets
 -- Claude call only these functions, by name, with the admin's own login. Each one is:
 --   - read-only: STABLE, so Postgres rejects any INSERT/UPDATE/DELETE inside it, and the Edge
@@ -669,8 +981,7 @@ grant execute on function public.admin_customer_summary() to authenticated;
 -- to what an answer needs.
 --
 -- A "visit" is one customer on one store-local (Tucson, America/Phoenix) day with at least one
--- ledger entry. Fills are debits (amount < 0) and purchases are credits (amount > 0). The
--- forfeit row written by admin_anonymize_customer() is not a visit.
+-- purchase or fill that wasn't later corrected. Corrections and forfeits (kind) aren't visits.
 create or replace function public.assistant_require_admin()
 returns void
 language plpgsql
@@ -780,7 +1091,8 @@ begin
   with entries as (
     select t.user_profile_id, (t.created_at at time zone 'America/Phoenix')::date as d, t.amount
     from public.gallon_transactions t
-    where t.note is distinct from 'Balance forfeited: account deleted'
+    where t.kind in ('purchase', 'fill')
+      and not exists (select 1 from public.gallon_transactions c where c.corrects_transaction_id = t.id)
       and t.created_at >= (p_start::timestamp at time zone 'America/Phoenix')
       and t.created_at < ((p_end + 1)::timestamp at time zone 'America/Phoenix')
   )
@@ -829,6 +1141,8 @@ begin
   join public.profiles p on p.id = t.user_profile_id
   where p.role = 'user'
     and p.anonymized_at is null
+    and t.kind in ('purchase', 'fill')
+    and not exists (select 1 from public.gallon_transactions c where c.corrects_transaction_id = t.id)
     and t.created_at >= (p_start::timestamp at time zone 'America/Phoenix')
     and t.created_at < ((p_end + 1)::timestamp at time zone 'America/Phoenix')
   group by p.id
@@ -885,9 +1199,12 @@ begin
 end;
 $$;
 
+-- Gained a kind column (item C); a function's result type can't change in place.
+drop function if exists public.assistant_customer_history(integer, integer);
 create or replace function public.assistant_customer_history(p_legacy_id integer, p_limit integer default 20)
 returns table (
   happened_at timestamp,
+  kind text,
   amount integer,
   new_balance integer,
   note text
@@ -909,7 +1226,7 @@ begin
   end if;
   -- happened_at is store-local time (America/Phoenix), without a zone.
   return query
-  select (t.created_at at time zone 'America/Phoenix'), t.amount, t.new_balance, t.note
+  select (t.created_at at time zone 'America/Phoenix'), t.kind, t.amount, t.new_balance, t.note
   from public.gallon_transactions t
   join public.profiles p on p.id = t.user_profile_id
   where p.legacy_id = p_legacy_id

@@ -2,40 +2,54 @@ import { useNavigate } from "react-router-dom";
 import { Minus, Plus } from "lucide-react";
 import { useUser } from "../../userContext";
 import { ICON_SIZE } from "../../lib/ui";
-import { initialsFor } from "../../lib/format";
-import { WATER_TYPE_LABELS } from "../../lib/customers";
+import { WATER_TYPE_LABELS, ledgerLabel } from "../../lib/customers";
 import { styles } from "../../styles";
-import AdminPanel from "../../admin/AdminPanel";
 
-// Home tab: a customer's profile card and recent history, the admin's customer panel, or a
-// prompt to log in.
-export default function TrackerTab({ adminView, sizeClass }) {
-  const { currentUser, notifications, isLoading } = useUser();
+// "Filled 10 gallons", "Bought 100 gallons", "Correction +50 gallons".
+function activityTitle(notif) {
+  const size = Math.abs(notif.amount);
+  const sign = notif.kind === "correction" ? (notif.amount > 0 ? "+" : "−") : "";
+  return { label: ledgerLabel(notif.kind, notif.amount), amount: `${sign}${size} gallon${size === 1 ? "" : "s"}` };
+}
+
+// Home (`/`): a signed-in customer's balance and recent activity, or a sign-in prompt for someone
+// who tapped Home while signed out. HomeRoute in MainApp sends the admin to Customers.
+export default function TrackerTab() {
+  const { currentUser, notifications, isLoading, historyUnavailable } = useUser();
   const navigate = useNavigate();
-  // A signed-in customer's Home tab (profile card + history), laid out per size class.
   const isCustomerHome = Boolean(currentUser && currentUser.role !== "admin");
+  const history = isCustomerHome ? (notifications || []).filter((n) => n.userId === currentUser.id) : [];
+  const firstName = (currentUser?.name || "").trim().split(/\s+/)[0];
 
   return (
     <div id="vh2o-tracker-home" className={isCustomerHome ? "vh2o-home" : undefined}>
-      {/* Customers only: the admin's Home is the customer panel below. */}
       {isCustomerHome && (
       <div id="vh2o-tracker-profile" className="vh2o-home-profile">
-        <div id="vh2o-tracker-avatar-ring" style={styles.avatarRing}>
-          <div id="vh2o-tracker-avatar" aria-hidden="true" style={styles.avatar}>
-            {initialsFor(currentUser.name, currentUser.email)}
-          </div>
+        <div>
+          <h1 id="vh2o-tracker-user-name" style={styles.pageTitle}>{firstName ? `Hi, ${firstName}` : "Hi there"}</h1>
+          <p style={styles.pageSubtitle}>
+            Customer #{currentUser.id}
+            {currentUser.memberSince && (
+              <span id="vh2o-tracker-member-since"> · member since {currentUser.memberSince}</span>
+            )}
+          </p>
         </div>
-        <div id="vh2o-tracker-user-name" style={styles.userName}>{currentUser.name} (ID: {currentUser.id})</div>
-        <div id="vh2o-tracker-member-since" style={styles.memberSince}>Member since {currentUser.memberSince}</div>
-        {currentUser.waterType && (
-          <div id="vh2o-tracker-water-type" style={styles.memberSince}>
-            {WATER_TYPE_LABELS[currentUser.waterType] || currentUser.waterType} Water
+        <section id="vh2o-tracker-points-pill" aria-label="Balance" style={{ ...styles.card, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--vh2o-text-muted)" }}>Prepaid gallons left</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 52, lineHeight: "52px", fontWeight: 800, letterSpacing: "-1px", color: "var(--vh2o-text)", fontVariantNumeric: "tabular-nums" }}>
+              {currentUser.gallons.toLocaleString()}
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--vh2o-text-muted)" }}>gallons</span>
           </div>
-        )}
-        <div id="vh2o-tracker-points-pill" style={styles.pointsPill}>
-          <div style={styles.pointsNum}>{currentUser.gallons.toLocaleString()}</div>
-          <div style={styles.pointsLabel}>GALLONS REMAINING</div>
-        </div>
+          {currentUser.waterType && (
+            <div>
+              <span id="vh2o-tracker-water-type" style={styles.accentPill}>
+                {WATER_TYPE_LABELS[currentUser.waterType] || currentUser.waterType} Water
+              </span>
+            </div>
+          )}
+        </section>
       </div>
       )}
       <div
@@ -44,60 +58,72 @@ export default function TrackerTab({ adminView, sizeClass }) {
         style={isCustomerHome ? undefined : styles.rewardsList}
       >
         {isLoading ? (
-          <p style={{ color: "var(--vh2o-text-subtle)", textAlign: "center", marginTop: 20 }}>Loading…</p>
+          <p style={{ color: "var(--vh2o-text-subtle)", marginTop: 20 }}>Loading…</p>
         ) : !currentUser ? (
-          <div style={{ textAlign: "center", padding: "40px 20px" }}>
-            <div style={styles.sectionTitle}>Login Required</div>
-            <p style={{ color: "var(--vh2o-text-subtle)", marginBottom: 20 }}>
-              Please log in to access your gallons tracker and account management.
+          <div id="vh2o-tracker-signed-out" style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 8, maxWidth: 440 }}>
+            <h1 style={styles.pageTitle}>Your gallons</h1>
+            <p style={{ ...styles.pageSubtitle, fontSize: 15, lineHeight: "22px" }}>
+              Sign in to see your prepaid balance and recent fills. Use the email we have on file
+              for you; we&apos;ll send you a code.
             </p>
-            <button onClick={() => navigate("/login")} style={styles.loginBtn}>Login</button>
+            <button id="vh2o-tracker-login-btn" type="button" onClick={() => navigate("/login")} style={styles.loginBtn}>
+              Sign in
+            </button>
+            <button id="vh2o-tracker-browse-menu-btn" type="button" onClick={() => navigate("/menu")} style={styles.secondaryBtn}>
+              Browse the menu
+            </button>
           </div>
-        ) : currentUser.role !== 'admin' ? (
+        ) : isCustomerHome ? (
           <>
-            <div id="vh2o-tracker-history-title" style={styles.sectionTitle}>Transaction History</div>
+            <h2 id="vh2o-tracker-history-title" style={styles.sectionTitle}>Recent activity</h2>
             <div id="vh2o-tracker-history" className="vh2o-home-history">
-            {notifications?.length > 0 && notifications.filter(n => n.userId === currentUser.id).length > 0 ? (
-              notifications
-                .filter(n => n.userId === currentUser.id)
-                .map((notif) => (
-                  <div id={`vh2o-tracker-notification-card-${notif.id}`} key={notif.id} style={styles.notificationCard}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div id={`vh2o-tracker-notification-icon-${notif.id}`} style={{
+            {history.length > 0 ? (
+              <div style={styles.listCard}>
+                {history.map((notif, i) => {
+                  const { label, amount } = activityTitle(notif);
+                  const credit = notif.type === "credit";
+                  return (
+                    <div id={`vh2o-tracker-notification-card-${notif.id}`} key={notif.id}
+                      style={{ ...styles.listRow, ...(i > 0 ? styles.listDivider : {}) }}>
+                      <div id={`vh2o-tracker-notification-icon-${notif.id}`} aria-hidden="true" style={{
                         ...styles.notificationIcon,
-                        background: notif.type === "credit" ? "#10b98133" : "#ef444433"
+                        background: credit ? "var(--vh2o-success-tint)" : "var(--vh2o-danger-tint)",
+                        color: credit ? "var(--vh2o-success)" : "var(--vh2o-danger)",
                       }}>
-                        {notif.type === "credit"
-                          ? <Plus size={ICON_SIZE.md} color="#34d399" aria-hidden="true" />
-                          : <Minus size={ICON_SIZE.md} color="#f87171" aria-hidden="true" />}
+                        {credit ? <Plus size={ICON_SIZE.inline + 2} /> : <Minus size={ICON_SIZE.inline + 2} />}
                       </div>
-                      <div style={{ flex: 1 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={styles.notificationTitle}>
-                          {notif.type === "credit" ? "Bought" : "Filled"}
-                        </div>
-                        <div id={`vh2o-tracker-notification-amount-${notif.id}`} style={{ ...styles.notificationBody, color: notif.type === "credit" ? "var(--vh2o-accent-soft)" : "var(--vh2o-danger)" }}>
-                          {notif.type === "credit" ? "+" : ""}{notif.amount} gallons
+                          {label} <span id={`vh2o-tracker-notification-amount-${notif.id}`}>{amount}</span>
                         </div>
                         <div id={`vh2o-tracker-notification-time-${notif.id}`} style={styles.notificationTime}>
                           {notif.displayTime}
                         </div>
-                        <div style={styles.notificationDetails}>
-                          Balance: {notif.previousBalance} → {notif.newBalance}
-                        </div>
+                        {notif.kind === "correction" && notif.note && (
+                          <div id={`vh2o-tracker-notification-note-${notif.id}`} style={{ ...styles.notificationDetails, fontStyle: "italic" }}>
+                            {notif.note}
+                          </div>
+                        )}
                       </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text-muted)", whiteSpace: "nowrap" }}>
+                        {notif.newBalance} left
+                      </span>
                     </div>
-                  </div>
-                ))
+                  );
+                })}
+              </div>
+            ) : historyUnavailable ? (
+              <p id="vh2o-tracker-history-unavailable" style={{ color: "var(--vh2o-text-subtle)" }}>
+                Your recent history couldn&apos;t be loaded right now. Your balance above is current.
+              </p>
             ) : (
-              <p id="vh2o-tracker-history-empty" style={{ color: "var(--vh2o-text-subtle)", textAlign: "center", marginTop: 20 }}>
-                No transactions for your account yet
+              <p id="vh2o-tracker-history-empty" style={{ color: "var(--vh2o-text-subtle)" }}>
+                No activity on your account yet
               </p>
             )}
             </div>
           </>
-        ) : (
-          <AdminPanel view={adminView} sizeClass={sizeClass} />
-        )}
+        ) : null}
       </div>
     </div>
   );

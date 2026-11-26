@@ -296,7 +296,7 @@ describe("UserProvider / admin actions", () => {
       totalMatches: 7,
       customers: [{
         id: 42, profileId: "p-42", name: "Dana", email: null, gallons: 100, waterType: "alkaline",
-        hasLogin: false, memberSince: "N/A", lastTransactionAt: null, anonymizedAt: null,
+        hasLogin: false, memberSince: null, lastTransactionAt: null, anonymizedAt: null,
       }],
     });
   });
@@ -331,6 +331,25 @@ describe("UserProvider / admin actions", () => {
     expect(profileRead.steps).toContainEqual(["eq", "auth_user_id", "auth-admin"]);
     expect(historyRead.steps).toContainEqual(["eq", "user_profile_id", "p-admin"]);
     expect(historyRead.steps).toContainEqual(["limit", 5]);
+  });
+
+  it("corrects an entry through admin_correct_transaction, and passes refusals through", async () => {
+    state.rpcResults.admin_correct_transaction = { data: {}, error: null };
+    const getCtx = await renderAsAdmin();
+
+    let ok;
+    await act(async () => {
+      ok = await getCtx().correctTransaction(905, "Rang up 50 instead of 5");
+    });
+    expect(sharedMock.client.rpc).toHaveBeenCalledWith("admin_correct_transaction", { p_transaction_id: 905, p_note: "Rang up 50 instead of 5" });
+    expect(ok).toEqual({ ok: true });
+
+    state.rpcResults.admin_correct_transaction = { data: null, error: { message: "This entry was already corrected" } };
+    let refused;
+    await act(async () => {
+      refused = await getCtx().correctTransaction(905, "again");
+    });
+    expect(refused).toEqual({ ok: false, message: "This entry was already corrected" });
   });
 
   it("adds a customer through admin_add_customer and returns the new customer number", async () => {

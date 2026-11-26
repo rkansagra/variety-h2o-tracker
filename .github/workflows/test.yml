@@ -50,6 +50,9 @@ jobs:
       - run: psql -v ON_ERROR_STOP=1 -f schema.sql
       # Again, to prove it's safe to re-run.
       - run: psql -v ON_ERROR_STOP=1 -f schema.sql
+      # The starting menu, twice: re-running must skip what's already there.
+      - run: psql -v ON_ERROR_STOP=1 -f seed/menu.sql
+      - run: psql -v ON_ERROR_STOP=1 -f seed/menu.sql
       - run: |
           for test in tests/*.test.sql; do
             echo "== $test"

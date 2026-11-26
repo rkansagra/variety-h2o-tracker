@@ -92,21 +92,15 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
         ) : (
           !user.hasLogin && <span className="vh2o-status-pill is-nologin">No login yet</span>
         )}
-        <span className="vh2o-admin-muted">Member since {user.memberSince}</span>
+        {user.memberSince && <span className="vh2o-admin-muted">Member since {user.memberSince}</span>}
         <span className="vh2o-admin-muted">Last activity {lastActivity}</span>
         <button
           id={`vh2o-admin-user-history-btn-${user.id}`}
           type="button"
           onClick={() => onViewHistory(user)}
-          style={{
-            border: "1px solid rgba(148,163,184,0.35)",
-            background: "rgba(148,163,184,0.1)",
-            color: "var(--vh2o-text-muted)",
-            borderRadius: 10, padding: "6px 10px",
-            fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
-          }}
+          style={{ ...styles.subtleBtn, whiteSpace: "nowrap" }}
         >
-          History
+          Full history
         </button>
       </div>
       <label htmlFor={`vh2o-admin-user-water-type-select-${user.id}`} style={{ ...styles.fieldLabel, marginBottom: -4 }}>Water type</label>
@@ -143,11 +137,8 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
               type="submit"
               disabled={isSavingEmail || !emailDraft.trim() || emailDraft.trim() === (user.email || "")}
               style={{
-                border: "1px solid rgba(56,189,248,0.4)",
-                background: "rgba(56,189,248,0.12)",
+                ...styles.subtleBtn,
                 color: "var(--vh2o-accent-soft)",
-                borderRadius: 10, padding: "6px 12px",
-                fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
                 opacity: isSavingEmail || !emailDraft.trim() || emailDraft.trim() === (user.email || "") ? 0.6 : 1,
               }}
             >
@@ -194,31 +185,17 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
           id={`vh2o-admin-user-credit-btn-${user.id}`}
           type="button"
           onClick={() => submit("credit")}
-          style={{
-            flex: 1,
-            border: "1px solid rgba(52,211,153,0.4)",
-            background: "rgba(52,211,153,0.15)",
-            color: "var(--vh2o-success)",
-            borderRadius: 10, padding: "8px",
-            fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-          }}
+          style={{ ...styles.loginBtn, flex: 1 }}
         >
-          Bought Today
+          Bought: add gallons
         </button>
         <button
           id={`vh2o-admin-user-debit-btn-${user.id}`}
           type="button"
           onClick={() => submit("debit")}
-          style={{
-            flex: 1,
-            border: "1px solid rgba(248,113,113,0.4)",
-            background: "rgba(248,113,113,0.12)",
-            color: "var(--vh2o-danger)",
-            borderRadius: 10, padding: "8px",
-            fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-          }}
+          style={{ ...styles.secondaryBtn, flex: 1 }}
         >
-          Filled Today
+          Filled: take off gallons
         </button>
       </div>
       {!user.anonymizedAt && !isConfirmingDelete && (
@@ -226,11 +203,7 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
           id={`vh2o-admin-user-delete-data-btn-${user.id}`}
           type="button"
           onClick={() => setIsConfirmingDelete(true)}
-          style={{
-            border: "none", background: "transparent", color: "var(--vh2o-danger)",
-            padding: "8px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-            textDecoration: "underline", alignSelf: "center",
-          }}
+          style={{ ...styles.linkBtn, color: "var(--vh2o-danger)", fontSize: 14, alignSelf: "flex-start", minHeight: 44 }}
         >
           Delete personal data…
         </button>
@@ -238,7 +211,7 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
       {!user.anonymizedAt && isConfirmingDelete && (
         <div
           id={`vh2o-admin-user-delete-data-confirm-${user.id}`}
-          style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, border: "1px solid rgba(248,113,113,0.4)", background: "rgba(248,113,113,0.08)" }}
+          style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, border: "1px solid var(--vh2o-danger)", background: "var(--vh2o-danger-tint)" }}
         >
           <p style={{ margin: 0, fontSize: 12, color: "var(--vh2o-text-muted)" }}>
             For an account-deletion request. This removes the customer's name and email, deletes
@@ -263,12 +236,7 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
               type="button"
               onClick={cancelDelete}
               disabled={isDeleting}
-              style={{
-                flex: 1,
-                border: "1px solid rgba(148,163,184,0.35)", background: "rgba(148,163,184,0.1)",
-                color: "var(--vh2o-text-muted)", borderRadius: 10, padding: "8px",
-                fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-              }}
+              style={{ ...styles.subtleBtn, flex: 1 }}
             >
               Cancel
             </button>
@@ -278,10 +246,8 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
               onClick={handleDelete}
               disabled={!deleteConfirmed || isDeleting}
               style={{
-                flex: 1,
-                border: "1px solid rgba(248,113,113,0.4)", background: "rgba(248,113,113,0.15)",
-                color: "var(--vh2o-danger)", borderRadius: 10, padding: "8px",
-                fontSize: 12, fontWeight: 800, cursor: deleteConfirmed ? "pointer" : "not-allowed", fontFamily: "inherit",
+                ...styles.dangerBtn, flex: 1,
+                cursor: deleteConfirmed ? "pointer" : "not-allowed",
                 opacity: !deleteConfirmed || isDeleting ? 0.6 : 1,
               }}
             >
@@ -289,7 +255,7 @@ export default function AdminUserRow({ user, onRequestAdjustment, onViewHistory,
             </button>
           </div>
           {deleteError && (
-            <p id={`vh2o-admin-user-delete-data-error-${user.id}`} style={{ margin: 0, color: "var(--vh2o-danger)", fontSize: 12, textAlign: "center" }}>{deleteError}</p>
+            <p id={`vh2o-admin-user-delete-data-error-${user.id}`} style={{ margin: 0, color: "var(--vh2o-danger)", fontSize: 12 }}>{deleteError}</p>
           )}
         </div>
       )}

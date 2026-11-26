@@ -1,152 +1,155 @@
-import { useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
-import { ICON_SIZE, buttonProps } from "../../lib/ui";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ICON_SIZE } from "../../lib/ui";
 import { slugify } from "../../lib/format";
-import { CATEGORY_SIZE_TIERS, MENU_CATEGORIES } from "../../menu/menuData";
+import { sizesOf } from "../../lib/menu";
+import { useMenu } from "../../menuContext";
 import { styles } from "../../styles";
 import CategoryIcon from "../../components/CategoryIcon";
 
-// Menu tab. Phone/tablet: a category grid that drills into one category. Desktop: the category
-// list beside the selected category's items. Leaving the tab unmounts it, which resets the
-// drill-down.
+const money = (n) => `$${n.toFixed(2)}`;
+
+// Menu (`/menu`, `/menu/:categoryId`). Phone/tablet: a list of categories that drills into one
+// category. Desktop: the category list beside the selected category's items. The category is in
+// the URL, so the back button returns to the list and a category can be linked to directly. The
+// menu and the intro text come from the database through MenuProvider (ROADMAP item E).
 export default function MenuTab({ isDesktop }) {
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [expandedItem, setExpandedItem] = useState(null);
+  const { status, categories, store, cachedAt } = useMenu();
+  // Hidden items reach an admin's browser (for the editor); the menu never shows them.
+  const MENU_CATEGORIES = categories.map((c) => ({ ...c, items: c.items.filter((item) => !item.hidden) }));
+  const { categoryId } = useParams();
+  const navigate = useNavigate();
+  const activeCategory = categoryId ?? null;
+  const setActiveCategory = (id) => navigate(id ? `/menu/${id}` : "/menu");
   // Desktop always shows a category (the first by default) beside the category list;
-  // phone and tablet show the category grid until one is picked.
-  const menuCategory = isDesktop ? (activeCategory ?? MENU_CATEGORIES[0].id) : activeCategory;
-  const renderMenuItems = (cat) => (
-    <div id="vh2o-menu-items" className="vh2o-menu-items">
-          {(() => {
-            // Per-item overrides: `flatPrice` opts an item out of the category's
-            // size tiers entirely (e.g. the snowcone ice-cream add-on); `customTiers`
-            // gives an item its own tier list instead of the category default (e.g.
-            // Protein Smoothie is priced differently than regular smoothies).
-            const tiersOf = (item) => item.flatPrice !== undefined
-              ? null
-              : (item.customTiers ?? CATEGORY_SIZE_TIERS[cat.id] ?? null);
+  // phone and tablet show the category list until one is picked.
+  const menuCategory = isDesktop ? (activeCategory ?? MENU_CATEGORIES[0]?.id ?? null) : activeCategory;
 
-            // Group items that share identical pricing (same tiers, or same flat
-            // price/unit) so flavors that all cost the same -- e.g. every milkshake
-            // is $8.05/$10.12 by size -- show that pricing once instead of repeating
-            // it on every flavor row.
-            const priceKeyOf = (item) => {
-              const tiers = tiersOf(item);
-              if (tiers) return `tiers:${tiers.map((t) => `${t.key}:${t.price}`).join(",")}`;
-              return `flat:${item.flatPrice ?? item.price}:${item.unit ?? ""}`;
-            };
-            const groups = [];
-            const groupIndexByKey = new Map();
-            cat.items.forEach((item, i) => {
-              const key = priceKeyOf(item);
-              if (!groupIndexByKey.has(key)) {
-                groupIndexByKey.set(key, groups.length);
-                groups.push({ key, entries: [] });
-              }
-              groups[groupIndexByKey.get(key)].entries.push({ item, i });
-            });
+  if (status === "loading" || status === "unavailable") {
+    return (
+      <div id="vh2o-menu-section" style={styles.rewardsList}>
+        <p id={`vh2o-menu-${status}`} style={{ color: "var(--vh2o-text-subtle)", marginTop: 20 }}>
+          {status === "loading" ? "Loading the menu…" : "The menu can't be loaded right now. Please try again in a moment."}
+        </p>
+      </div>
+    );
+  }
+  if (categoryId && !MENU_CATEGORIES.some((c) => c.id === categoryId)) {
+    return <Navigate to="/menu" replace />;
+  }
 
-            const renderItemCard = (item, i) => {
-              const itemSlug = slugify(item.name);
-              const itemDomKey = `${menuCategory}-${itemSlug || i}`;
-              const itemTiers = tiersOf(item);
-              return (
-                <div
-                  id={`vh2o-menu-item-card-${itemDomKey}`}
-                  key={i}
-                  style={{ ...styles.rewardCard, cursor: item.description ? "pointer" : "default" }}
-                  {...(item.description ? {
-                    ...buttonProps(() => setExpandedItem(expandedItem === `${menuCategory}-${i}` ? null : `${menuCategory}-${i}`)),
-                    "aria-expanded": expandedItem === `${menuCategory}-${i}`,
-                  } : {})}
-                >
-                  <div aria-hidden="true" style={styles.rewardIcon}><CategoryIcon cat={cat} /></div>
-                  <div style={styles.rewardInfo}>
-                    <div id={`vh2o-menu-item-name-${itemDomKey}`} style={styles.rewardName}>{item.name}</div>
-                    {!itemTiers && (
-                      <div id={`vh2o-menu-item-price-${itemDomKey}`} style={styles.rewardDesc}>${(item.flatPrice ?? item.price).toFixed(2)} {item.unit}</div>
+  const renderMenuItems = (cat) => {
+    // An item with its own price has no sizes (e.g. the snowcone ice-cream add-on);
+    // otherwise it uses its own sizes (e.g. Protein Smoothie) or its category's.
+    const tiersOf = (item) => sizesOf(item, cat);
+
+    // Group items that share identical pricing (same sizes, or same price/unit) so flavors that
+    // all cost the same -- e.g. every milkshake is $8.05/$10.12 by size -- show that pricing once
+    // instead of repeating it on every flavor.
+    const priceKeyOf = (item) => {
+      const tiers = tiersOf(item);
+      if (tiers) return `tiers:${tiers.map((t) => `${t.key}:${t.price}`).join(",")}`;
+      return `flat:${item.price}:${item.unit ?? ""}`;
+    };
+    const groups = [];
+    const groupIndexByKey = new Map();
+    cat.items.forEach((item, i) => {
+      const key = priceKeyOf(item);
+      if (!groupIndexByKey.has(key)) {
+        groupIndexByKey.set(key, groups.length);
+        groups.push({ key, entries: [] });
+      }
+      groups[groupIndexByKey.get(key)].entries.push({ item, i });
+    });
+
+    // One item on its own: name and description, price or sizes on the right.
+    const renderItemCard = (item, i) => {
+      const itemDomKey = `${menuCategory}-${slugify(item.name) || i}`;
+      const itemTiers = tiersOf(item);
+      return (
+        <div id={`vh2o-menu-item-card-${itemDomKey}`} key={i} style={{ ...styles.rewardCard, alignItems: "flex-start" }}>
+          <div style={styles.rewardInfo}>
+            <div id={`vh2o-menu-item-name-${itemDomKey}`} style={styles.rewardName}>{item.name}</div>
+            {item.description && (
+              <div id={`vh2o-menu-item-description-${itemDomKey}`} style={{ ...styles.rewardDesc, lineHeight: "18px" }}>
+                {item.description}
+              </div>
+            )}
+          </div>
+          {itemTiers ? (
+            <div style={styles.sizeOptionsRow}>
+              {itemTiers.map((tier) => (
+                <span id={`vh2o-menu-item-size-btn-${itemDomKey}-${tier.key}`} key={tier.key} style={styles.sizeOptionBtn}>
+                  {tier.label} {money(tier.price)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div id={`vh2o-menu-item-price-${itemDomKey}`} style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "var(--vh2o-text)" }}>{money(item.price)}</div>
+              {item.unit && <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)" }}>{item.unit}</div>}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    return (
+      <div id="vh2o-menu-items" className="vh2o-menu-items">
+        {groups.map((group, groupIdx) => {
+          if (group.entries.length === 1) {
+            const { item, i } = group.entries[0];
+            return renderItemCard(item, i);
+          }
+          const sampleItem = group.entries[0].item;
+          const sampleTiers = tiersOf(sampleItem);
+          return (
+            <div key={group.key} className="vh2o-menu-group" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div id={`vh2o-menu-group-pricing-${menuCategory}-${groupIdx}`} style={styles.groupPricingBar}>
+                {sampleTiers
+                  ? sampleTiers.map((tier) => (
+                      <span key={tier.key} style={styles.groupPricingPill}>
+                        {tier.label} <span style={{ color: "var(--vh2o-text-muted)" }}>{money(tier.price)}</span>
+                      </span>
+                    ))
+                  : (
+                      <span style={styles.groupPricingPill}>{money(sampleItem.price)} {sampleItem.unit}</span>
                     )}
-                    {item.description && expandedItem === `${menuCategory}-${i}` && (
-                      <div id={`vh2o-menu-item-description-${itemDomKey}`} style={{ ...styles.rewardDesc, fontSize: 12, marginTop: 4, lineHeight: 1.4 }}>
-                        {item.description}
-                      </div>
-                    )}
-                  </div>
-                  {itemTiers && (
-                    <div style={styles.sizeOptionsRow}>
-                      {itemTiers.map((tier) => (
-                        <button
-                          id={`vh2o-menu-item-size-btn-${itemDomKey}-${tier.key}`}
-                          key={tier.key}
-                          type="button"
-                          style={styles.sizeOptionBtn}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Placeholder for future cart integration.
-                            console.log(`Selected ${tier.label} for ${item.name} at $${tier.price.toFixed(2)}`);
-                          }}
-                        >
-                          {tier.label} - ${tier.price.toFixed(2)}
-                        </button>
-                      ))}
+              </div>
+              <div style={styles.flavorGrid}>
+                {group.entries.map(({ item, i }) => {
+                  const itemDomKey = `${menuCategory}-${slugify(item.name) || i}`;
+                  return (
+                    <div id={`vh2o-menu-item-card-${itemDomKey}`} key={i} style={styles.flavorChip}>
+                      <span id={`vh2o-menu-item-name-${itemDomKey}`}>{item.name}</span>
                     </div>
-                  )}
-                  {item.description && (
-                    <div aria-hidden="true" style={{ color: "var(--vh2o-text-subtle)", marginLeft: "auto", display: "flex" }}>
-                      {expandedItem === `${menuCategory}-${i}` ? <ChevronUp size={ICON_SIZE.inline + 2} /> : <ChevronDown size={ICON_SIZE.inline + 2} />}
-                    </div>
-                  )}
-                </div>
-              );
-            };
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
-            return groups.map((group, groupIdx) => {
-              // A price shared by only one item isn't "duplicate" -- keep its full
-              // card (name + price/size buttons) exactly as before.
-              if (group.entries.length === 1) {
-                const { item, i } = group.entries[0];
-                return renderItemCard(item, i);
-              }
-              const sampleItem = group.entries[0].item;
-              const sampleTiers = tiersOf(sampleItem);
-              return (
-                <div key={group.key} className="vh2o-menu-group" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div id={`vh2o-menu-group-pricing-${menuCategory}-${groupIdx}`} style={styles.groupPricingBar}>
-                    {sampleTiers
-                      ? sampleTiers.map((tier) => (
-                          <span key={tier.key} style={styles.groupPricingPill}>{tier.label} · ${tier.price.toFixed(2)}</span>
-                        ))
-                      : (
-                          <span style={styles.groupPricingPill}>${(sampleItem.flatPrice ?? sampleItem.price).toFixed(2)} {sampleItem.unit}</span>
-                        )}
-                  </div>
-                  <div style={styles.flavorGrid}>
-                    {group.entries.map(({ item, i }) => {
-                      const itemSlug = slugify(item.name);
-                      const itemDomKey = `${menuCategory}-${itemSlug || i}`;
-                      return (
-                        <div id={`vh2o-menu-item-card-${itemDomKey}`} key={i} style={styles.flavorChip}>
-                          <span id={`vh2o-menu-item-name-${itemDomKey}`}>{item.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            });
-          })()}
-    </div>
-  );
   const intro = (
-    <>
-        <div id="vh2o-menu-tagline" style={{ fontSize: 13, fontStyle: "italic", color: "var(--vh2o-accent-soft)", textAlign: "center", marginBottom: 4 }}>
-          Diligently Purified for an Impeccable Taste
-        </div>
-        <div id="vh2o-menu-welcome" style={{ fontSize: 12, color: "var(--vh2o-text-muted)", textAlign: "center", lineHeight: 1.6, marginBottom: 12 }}>
-          We are a family-owned and operated water purification and desserts shop! Come try
-          all of our purified waters: RO, Re-mineralized, and Alkaline!
-        </div>
-    </>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {status === "cached" && (
+        <p id="vh2o-menu-cached-note" style={{ ...styles.neutralPill, alignSelf: "flex-start", whiteSpace: "normal", marginBottom: 8 }}>
+          Offline: showing the menu as of {new Date(cachedAt).toLocaleDateString()}. Prices may have changed.
+        </p>
+      )}
+      <h1 id="vh2o-menu-title" style={styles.pageTitle}>Menu</h1>
+      {store?.tagline && (
+        <p id="vh2o-menu-tagline" style={{ ...styles.pageSubtitle, color: "var(--vh2o-accent-soft)", fontWeight: 700 }}>
+          {store.tagline}
+        </p>
+      )}
+      {store?.welcome && (
+        <p id="vh2o-menu-welcome" style={styles.pageSubtitle}>{store.welcome}</p>
+      )}
+    </div>
   );
 
   if (isDesktop) {
@@ -156,9 +159,9 @@ export default function MenuTab({ isDesktop }) {
         {intro}
         {/* The heading sits over the items only, so the category list lines up with the first item. */}
         <div className="vh2o-menu-desk">
-          <div id="vh2o-menu-category-title" className="vh2o-menu-desk-title" style={styles.sectionTitle}>
-            <span aria-hidden="true"><CategoryIcon cat={cat} /></span> {cat.name}
-          </div>
+          <h2 id="vh2o-menu-category-title" className="vh2o-menu-desk-title" style={{ ...styles.sectionTitle, fontSize: 20 }}>
+            {cat.name}
+          </h2>
           <nav id="vh2o-menu-category-list" className="vh2o-menu-cat-list" aria-label="Menu categories">
             {MENU_CATEGORIES.map((c) => (
               <button
@@ -167,9 +170,9 @@ export default function MenuTab({ isDesktop }) {
                 type="button"
                 className="vh2o-menu-cat-link"
                 aria-current={c.id === cat.id ? "true" : undefined}
-                onClick={() => { setActiveCategory(c.id); setExpandedItem(null); }}
+                onClick={() => setActiveCategory(c.id)}
               >
-                <span aria-hidden="true" className="vh2o-menu-cat-emoji"><CategoryIcon cat={c} /></span>
+                <CategoryIcon cat={c} />
                 <span className="vh2o-menu-cat-name">{c.name}</span>
                 <span className="vh2o-menu-cat-count">{c.items.length}</span>
               </button>
@@ -186,45 +189,37 @@ export default function MenuTab({ isDesktop }) {
       {menuCategory === null ? (
         <>
           {intro}
-          <div id="vh2o-menu-title" style={styles.sectionTitle}>Our Menu</div>
-          <div id="vh2o-menu-categories-grid" className="vh2o-menu-grid">
-          {MENU_CATEGORIES.map((cat) => (
-            <div
-              id={`vh2o-menu-category-card-${cat.id}`}
-              key={cat.id}
-              style={{
-                background: "var(--vh2o-surface)",
-                border: `1px solid ${cat.color}55`,
-                borderRadius: 16,
-                padding: "22px 14px",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 8,
-                cursor: "pointer",
-                transition: "all 0.2s",
-              }}
-              {...buttonProps(() => { setActiveCategory(cat.id); setExpandedItem(null); })}
-            >
-              <div aria-hidden="true" style={{ fontSize: 38 }}><CategoryIcon cat={cat} /></div>
-              <div id={`vh2o-menu-category-name-${cat.id}`} style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)", textAlign: "center" }}>{cat.name}</div>
-              <div style={{ fontSize: 12, color: cat.color, fontWeight: 600 }}>{cat.items.length} items</div>
-            </div>
-          ))}
+          <div id="vh2o-menu-categories-grid" className="vh2o-menu-grid" style={styles.listCard}>
+            {MENU_CATEGORIES.map((cat, i) => (
+              <button
+                id={`vh2o-menu-category-card-${cat.id}`}
+                key={cat.id}
+                type="button"
+                className="vh2o-menu-row"
+                style={i > 0 ? styles.listDivider : undefined}
+                onClick={() => setActiveCategory(cat.id)}
+              >
+                <CategoryIcon cat={cat} />
+                <span id={`vh2o-menu-category-name-${cat.id}`} className="vh2o-menu-row-name">{cat.name}</span>
+                <span className="vh2o-menu-cat-count">{cat.items.length} items</span>
+                <ChevronRight size={ICON_SIZE.inline + 2} aria-hidden="true" color="var(--vh2o-text-subtle)" />
+              </button>
+            ))}
           </div>
         </>
       ) : (() => {
         const cat = MENU_CATEGORIES.find((c) => c.id === menuCategory);
         return (
           <>
-          <button
-            id="vh2o-menu-back-btn"
-            onClick={() => { setActiveCategory(null); setExpandedItem(null); }}
-            style={{ background: "none", border: "none", color: "var(--vh2o-accent)", cursor: "pointer", fontSize: 14, padding: "4px 0", textAlign: "left", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit", fontWeight: 700 }}
-          >
-            <ChevronLeft size={ICON_SIZE.inline + 2} aria-hidden="true" /> Back to Menu
-          </button>
-            <div style={styles.sectionTitle}><span aria-hidden="true"><CategoryIcon cat={cat} /></span> {cat.name}</div>
+            <button
+              id="vh2o-menu-back-btn"
+              type="button"
+              onClick={() => setActiveCategory(null)}
+              style={{ ...styles.linkBtn, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, minHeight: 44 }}
+            >
+              <ChevronLeft size={ICON_SIZE.inline + 4} aria-hidden="true" /> Menu
+            </button>
+            <h1 style={{ ...styles.pageTitle, marginTop: -8 }}>{cat.name}</h1>
             {renderMenuItems(cat)}
           </>
         );

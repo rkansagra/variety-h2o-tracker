@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { Store } from "lucide-react";
-import { ICON_SIZE } from "../lib/ui";
-import { STORE_ADDRESS_LINES, STORE_HOURS, STORE_PHONE } from "../lib/store";
+import { useMenu } from "../menuContext";
 import { useUser } from "../userContext";
 import { styles } from "../styles";
 import PrivacyPolicyLink from "../components/PrivacyPolicyLink";
+import BrandLogo from "../components/BrandLogo";
 
 // Shown to someone signed in (emailed code or Google) whose email isn't on any customer record.
 // Staff add the email at the counter; "Check again" then links the login (link_my_profile()).
 export function NoAccount() {
   const { unlinkedAuthEmail, isLoading, recheckAccount, logout } = useUser();
+  const { store } = useMenu();
   const navigate = useNavigate();
   const [checking, setChecking] = useState(false);
   const [stillMissing, setStillMissing] = useState(false);
@@ -44,24 +44,24 @@ export function NoAccount() {
   return (
     <div id="vh2o-no-account-root" className="vh2o-root vh2o-auth" style={styles.root}>
       <div id="vh2o-no-account-phone" className="vh2o-phone" style={styles.phone}>
-        <div id="vh2o-no-account-content" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div id="vh2o-no-account-title" style={styles.storeName}>
-            <Store size={ICON_SIZE.md} aria-hidden="true" />
-            <span>Almost there</span>
-          </div>
-          <p id="vh2o-no-account-message" style={{ color: "var(--vh2o-text-muted)", fontSize: 14, margin: "24px 0 16px" }}>
+        <div id="vh2o-no-account-content" style={{ padding: "48px 24px 32px" }}>
+          <BrandLogo className="vh2o-auth-logo" />
+          <h1 id="vh2o-no-account-title" style={styles.pageTitle}>Almost there</h1>
+          <p id="vh2o-no-account-message" style={{ ...styles.pageSubtitle, fontSize: 15, lineHeight: "22px", margin: "6px 0 16px" }}>
             We couldn&apos;t find a prepaid account for{" "}
             <strong style={{ color: "var(--vh2o-text)" }}>{unlinkedAuthEmail}</strong>. Next time you&apos;re in,
             ask us to add this email to your account, then tap Check again.
           </p>
+          {store && (
           <div id="vh2o-no-account-store" style={{ ...styles.rewardCard, flexDirection: "column", gap: 4, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--vh2o-text)" }}>Variety H2O + Ice Cream</div>
             <div style={{ fontSize: 12, color: "var(--vh2o-text-subtle)", lineHeight: 1.6 }}>
-              {STORE_ADDRESS_LINES.map((line) => <div key={line}>{line}</div>)}
-              {STORE_HOURS.map(({ days, hours }) => <div key={days}>{days}: {hours}</div>)}
-              <a href={STORE_PHONE.tel} style={{ color: "var(--vh2o-accent)" }}>{STORE_PHONE.display}</a>
+              {store.addressLines.map((line, i) => <div key={i}>{line}</div>)}
+              {store.hours.map(({ days, hours }, i) => <div key={i}>{days}: {hours}</div>)}
+              <a href={store.phone.tel} style={{ color: "var(--vh2o-accent)" }}>{store.phone.display}</a>
             </div>
           </div>
+          )}
           <button
             id="vh2o-no-account-check-again-btn"
             type="button"

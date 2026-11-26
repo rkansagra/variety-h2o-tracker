@@ -29,12 +29,17 @@
   `assistant_*` Postgres functions. Keep it read-only: never give it a tool that writes, raw SQL, or
   the service-role key. Setup is in `SUPABASE_SETUP.md`.
 - `UserProvider.jsx` owns auth/session state, the signed-in user's own profile, and transaction
-  notifications, and is the only place that reads or writes app data in Supabase (screens may
-  still check the auth session). Components read it with
-  `useUser()` from `userContext.js`.
-- Routing is minimal (`/`, `/login`, `/forgot-password`, `/no-account`) with `react-router-dom`; in-app navigation is tab
-  state (`activeTab` in `screens/MainApp.jsx`) not route-based. State that must survive switching
-  tabs (e.g. the admin's customer search) lives in `MainApp`, since a tab unmounts when you leave it.
+  notifications. `MenuProvider.jsx` owns the menu and store info (public read, admin edits). These
+  two are the only places that read or write app data in Supabase (screens may still check the
+  auth session). Components read them with `useUser()` from `userContext.js` and `useMenu()` from
+  `menuContext.js`.
+- Routing uses `react-router-dom`. `App.jsx` routes the sign-in screens (`/login`,
+  `/forgot-password`, `/no-account`) and hands everything else (`/*`) to `screens/MainApp.jsx`,
+  whose own routes are the sections: `/` (a customer's Home; signed-out visitors go to `/menu`,
+  the admin to `/admin`), `/menu`, `/menu/:categoryId`, `/location`, `/settings`, `/admin`, and
+  `/admin/customers/:customerId` (admin only). Selections that should survive a reload or the back
+  button go in the URL. State that should survive changing sections but stay out of the URL (the
+  admin's search text, which can hold a customer's name) lives in `MainApp`.
 
 ## Data flow and state model
 - Supabase (Postgres + Auth + RLS) is the single source of truth. There is no `localStorage`
@@ -52,7 +57,7 @@
 - Transaction rows live in `gallon_transactions`. The customer's own tracker tab shows the 5 most
   recent; admin can pull a customer's full history via a separate view/RPC.
 - Customers sign in with an emailed 6-digit code (or Google on the web); staff use email +
-  password (no MFA: several owners share the admin login across devices). Staff add customer
+  password (no MFA, by the owners' choice; don't re-add it). Staff add customer
   records with a required email (`admin_add_customer`) and fill in imported customers' emails
   (`admin_set_customer_email`); on first sign-in `link_my_profile()` links the login to the record
   with that confirmed email (never a login that has a password). The browser never writes
@@ -65,8 +70,13 @@
 ## Project-specific conventions
 - Stable DOM IDs are required and documented in `TEST_IDS.md`; ID changes are test-breaking.
 - ID format is `vh2o-<screen>-<section>-<element>[-token]`; use stable tokens (e.g., `user.id`, slugified item names).
-- Styling pattern is inline style objects + a CSS string in `src/styles.js` (`styles` and `css`), plus size-class layout rules in `src/index.css`, not component CSS modules.
-- Menu/category content is static config arrays in `src/menu/menuData.js` (`MENU_CATEGORIES`, `CATEGORY_SIZE_TIERS`), not API-driven. Treat prices as real business data -- don't change them without confirming against the actual source (e.g. a POS catalog export) first.
+- Styling pattern is inline style objects + a CSS string in `src/styles.js` (`styles` and `css`), plus size-class layout rules in `src/index.css`, not component CSS modules. Every color is a `--vh2o-*` token from `src/index.css`: light by default, swapped under `prefers-color-scheme: dark`, so never write a raw color (the menu-category colors from the database are the one exception). Reuse the shared styles (`loginBtn` for a screen's main button, `secondaryBtn`, `subtleBtn`, `dangerBtn`, `linkBtn`, `card`, `listCard`/`listRow`, `accentPill`, `pageTitle`, `sectionTitle`) instead of hand-styling. Content is left-aligned. The logo is `components/BrandLogo.jsx`.
+- Menu items, prices, size prices, and store info (address, phone, hours, links) live in the
+  database (`menu_categories`, `menu_items`, `store_info`), edited by the admin at `/admin/menu`;
+  every edit is logged in `menu_changes`. Categories themselves (names, icons, order) change only
+  through `schema.sql`/`supabase/seed/menu.sql`. Treat prices as real business data -- don't change
+  them without confirming against the actual source (e.g. a POS catalog export) first. The menu
+  is the one thing kept in `localStorage`: the last copy loaded, shown with its date when offline.
 - ESLint enforces no unused vars except names matching `^[A-Z_]` (`eslint.config.js`).
 
 ## Build, run, and quality workflow

@@ -1,37 +1,46 @@
 /* ─── Design tokens ────────────────────────────────────────────────────────────
-   The app's palette and spacing as named values (from the ui-ux-pro-max audit). Styles in src/
-   and here reference these instead of raw colors. Deliberate exceptions stay raw hex: menu-category
-   and reward-tier colors (data combined into other values, e.g. `${cat.color}55`), Lucide icon
-   `color` props (SVG attributes), and one-off accent tints used by a single element. */
+   The app's palette and spacing as named values (ROADMAP item I). Light is the default; the block
+   under prefers-color-scheme: dark swaps the colors when the phone or computer is in dark mode,
+   so every style that uses a token follows the theme. Styles in src/ and here reference these
+   instead of raw colors. Deliberate exceptions stay raw hex: menu-category colors (data from the
+   database). The accent is the blue from the logo. */
 :root {
-  --vh2o-bg: #0f172a;
-  --vh2o-bg-raised: #1b2335;
-  --vh2o-surface: rgba(255, 255, 255, 0.05);
-  --vh2o-sheet: #1e293b;
-  --vh2o-border: rgba(255, 255, 255, 0.08);
-  --vh2o-border-accent: rgba(125, 211, 252, 0.25);
-  --vh2o-text: #f0f9ff;
-  --vh2o-text-muted: #94a3b8;
-  --vh2o-text-subtle: #8a99ae;
-  --vh2o-accent: #38bdf8;
-  --vh2o-accent-soft: #7dd3fc;
-  --vh2o-accent-strong: #0ea5e9;
-  --vh2o-success: #34d399;
-  --vh2o-danger: #f87171;
-  --vh2o-surface-subtle: rgba(255, 255, 255, 0.04);
-  --vh2o-border-strong: rgba(255, 255, 255, 0.1);
-  --vh2o-scrim: rgba(0, 0, 0, 0.6);
-  --vh2o-cta: linear-gradient(135deg, #f472b6, #fb923c);
-  --vh2o-page-gradient: linear-gradient(160deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
-  --vh2o-header-gradient: linear-gradient(160deg, #164e63 0%, #1e3a5f 60%, #0f172a 100%);
-  --vh2o-avatar-gradient: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  --vh2o-bg: #f6f8fb;
+  --vh2o-bg-raised: #ffffff;
+  --vh2o-bar: #ffffff;
+  --vh2o-surface: #ffffff;
+  --vh2o-surface-subtle: #f1f5f9;
+  --vh2o-sheet: #ffffff;
+  --vh2o-border: #e2e8f0;
+  --vh2o-border-strong: #cbd5e1;
+  --vh2o-border-accent: #cbd5e1;
+  --vh2o-text: #0f172a;
+  --vh2o-text-muted: #475569;
+  --vh2o-text-subtle: #5b6b80;
+  /* Buttons, links, the active tab. --vh2o-accent-soft is accent-colored text (numbers, labels). */
+  --vh2o-accent: #1667b0;
+  --vh2o-accent-soft: #1667b0;
+  --vh2o-accent-strong: #11558f;
+  --vh2o-on-accent: #ffffff;
+  --vh2o-accent-tint: #e3eef9;
+  --vh2o-success: #067647;
+  --vh2o-success-tint: #e3f5ec;
+  --vh2o-danger: #b42318;
+  --vh2o-danger-tint: #fdecec;
+  --vh2o-warning: #8a4b08;
+  --vh2o-warning-tint: #fef3c7;
+  --vh2o-neutral-tint: #eef2f7;
+  --vh2o-scrim: rgba(15, 23, 42, 0.45);
+  --vh2o-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --vh2o-shadow-raised: 0 12px 32px rgba(15, 23, 42, 0.12);
+  --vh2o-cta: var(--vh2o-accent);
   --vh2o-space-1: 4px;
   --vh2o-space-2: 8px;
   --vh2o-space-3: 12px;
   --vh2o-space-4: 16px;
   --vh2o-space-6: 24px;
   --vh2o-space-8: 32px;
-  --vh2o-radius-control: 10px;
+  --vh2o-radius-control: 12px;
   --vh2o-radius-card: 16px;
   /* Content column widths per size class. */
   --vh2o-column-tablet: 760px;
@@ -40,15 +49,45 @@
   --vh2o-column-admin: 1400px;
 }
 
-/* Page-level defaults. The text color is the app's muted gray: text without its own color must
-   stay readable on the navy background whatever the phone's light/dark setting. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --vh2o-bg: #0b1220;
+    --vh2o-bg-raised: #101828;
+    --vh2o-bar: #0f1729;
+    --vh2o-surface: #141d2f;
+    --vh2o-surface-subtle: #111a2b;
+    --vh2o-sheet: #172136;
+    --vh2o-border: #22304a;
+    --vh2o-border-strong: #33425e;
+    --vh2o-border-accent: #33425e;
+    --vh2o-text: #eef4fb;
+    --vh2o-text-muted: #a9b6c9;
+    --vh2o-text-subtle: #8e9db2;
+    --vh2o-accent: #5aaef0;
+    --vh2o-accent-soft: #7cc0f5;
+    --vh2o-accent-strong: #8ccbf7;
+    --vh2o-on-accent: #06223d;
+    --vh2o-accent-tint: #13304d;
+    --vh2o-success: #5fe0ae;
+    --vh2o-success-tint: #12352a;
+    --vh2o-danger: #f5a3a3;
+    --vh2o-danger-tint: #3a1e24;
+    --vh2o-warning: #f5c76a;
+    --vh2o-warning-tint: #3a2e12;
+    --vh2o-neutral-tint: #1c2740;
+    --vh2o-scrim: rgba(0, 0, 0, 0.6);
+    --vh2o-shadow: none;
+    --vh2o-shadow-raised: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Page-level defaults. Text without its own color uses the muted gray. */
 :root {
   font: 18px/145% 'Nunito', system-ui, 'Segoe UI', Roboto, sans-serif;
   letter-spacing: 0.18px;
   color-scheme: light dark;
   color: var(--vh2o-text-muted);
-  /* Shows during iOS overscroll bounce and behind the notch/home-indicator areas, where white
-     would flash. */
+  /* Shows during iOS overscroll bounce and behind the notch/home-indicator areas. */
   background: var(--vh2o-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -74,7 +113,7 @@ body {
 
 #root {
   width: 100%;
-  text-align: center;
+  text-align: left;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
@@ -149,14 +188,51 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
   min-height: 0;
   border-radius: 20px;
   border: 1px solid var(--vh2o-border);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--vh2o-shadow-raised);
 }
 
-/* Logo banner (phone and tablet): capped so it doesn't balloon across a tablet's width. */
-.vh2o-banner-logo {
+/* Phone and tablet top bar: the logo, and the signed-in person's initials (to Settings). */
+.vh2o-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--vh2o-space-3);
+  min-height: 60px;
+  padding: 0 var(--vh2o-space-4);
+  background: var(--vh2o-bar);
+  border-bottom: 1px solid var(--vh2o-border);
+}
+
+.vh2o-appbar-logo {
+  height: 36px;
+  width: auto;
   display: block;
-  max-width: 360px;
-  margin-inline: auto;
+}
+
+.vh2o-appbar-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: var(--vh2o-accent-tint);
+  color: var(--vh2o-accent-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Sign-in screens: the logo above the form. */
+.vh2o-auth-logo {
+  display: block;
+  width: min(240px, 70%);
+  height: auto;
+  margin-bottom: var(--vh2o-space-6);
 }
 
 /* Desktop top bar: logo, the four tabs, and the signed-in account (replaces the logo banner and
@@ -170,7 +246,7 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
   gap: var(--vh2o-space-6);
   padding: 0 var(--vh2o-space-8);
   min-height: 68px;
-  background: linear-gradient(90deg, #13233b, var(--vh2o-bg) 70%);
+  background: var(--vh2o-bar);
   border-bottom: 1px solid var(--vh2o-border);
   text-align: left;
 }
@@ -205,9 +281,8 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
 }
 
 .vh2o-topbar-tab[aria-current="page"] {
-  color: var(--vh2o-text);
-  background: rgba(56, 189, 248, 0.12);
-  box-shadow: inset 0 -2px 0 var(--vh2o-accent);
+  color: var(--vh2o-accent-soft);
+  background: var(--vh2o-accent-tint);
 }
 
 .vh2o-topbar-account {
@@ -226,17 +301,17 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--vh2o-avatar-gradient);
-  color: var(--vh2o-bg);
+  background: var(--vh2o-accent-tint);
+  color: var(--vh2o-accent-soft);
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .vh2o-topbar-login {
   border: 0;
   border-radius: var(--vh2o-radius-control);
-  background: var(--vh2o-cta);
-  color: #fff;
+  background: var(--vh2o-accent);
+  color: var(--vh2o-on-accent);
   font: inherit;
   font-weight: 800;
   padding: 10px 18px;
@@ -244,8 +319,7 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
 }
 
 /* ─── Customer screens ─────────────────────────────────────────────────────────
-   Section headings and content blocks are centered at every size; text inside rows and cards stays
-   left-aligned for scanning. */
+   Everything is left-aligned (ROADMAP item I), at every size. */
 
 /* Home: profile card + transaction history. */
 .vh2o-home-section,
@@ -255,40 +329,35 @@ html[data-size="desktop"] .vh2o-auth .vh2o-phone {
   gap: 10px;
 }
 
+/* Greeting and balance card, then the activity list. */
+.vh2o-home-profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vh2o-space-4);
+  padding: 20px 16px 0;
+}
+
 .vh2o-home-section {
-  padding: 16px 16px 0;
+  padding: 20px 16px 0;
 }
 
-html[data-size="tablet"] .vh2o-home-profile,
-html[data-size="desktop"] .vh2o-home-profile {
-  background: var(--vh2o-surface);
-  border: 1px solid var(--vh2o-border);
-  border-radius: var(--vh2o-radius-card);
-  padding: var(--vh2o-space-6) var(--vh2o-space-4);
-}
-
-/* Tablet (portrait and landscape): the profile card is centered on its own row, history below. */
-html[data-size="tablet"] .vh2o-home-profile {
-  width: calc(100% - 2 * var(--vh2o-space-4));
-  max-width: 440px;
-  margin: var(--vh2o-space-4) auto 0;
-}
-
-/* Desktop: profile card left, history right. The heading sits over the history column only, so
-   the top of the card lines up with the first transaction. */
+/* Desktop: greeting and balance left (spanning both rows), activity right, so the greeting lines up
+   with the "Recent activity" heading. */
 html[data-size="desktop"] .vh2o-home {
   display: grid;
   grid-template-columns: 360px minmax(0, 1fr);
   grid-template-areas:
-    ". title"
+    "card title"
     "card list";
+  grid-template-rows: auto 1fr;
   gap: var(--vh2o-space-3) var(--vh2o-space-6);
   align-items: start;
-  padding-inline: var(--vh2o-space-4);
+  padding: var(--vh2o-space-6) var(--vh2o-space-4) 0;
 }
 
 html[data-size="desktop"] .vh2o-home-profile {
   grid-area: card;
+  padding: 0;
 }
 
 html[data-size="desktop"] .vh2o-home-section {
@@ -303,22 +372,31 @@ html[data-size="desktop"] .vh2o-home-history {
   grid-area: list;
 }
 
-/* Menu: category grid (phone/tablet) or category list beside the items (desktop). */
+/* Menu: a list of categories (phone/tablet) or the category list beside the items (desktop). */
 .vh2o-menu-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
 }
 
-html[data-size="tablet"] .vh2o-menu-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.vh2o-menu-row {
+  display: flex;
+  align-items: center;
   gap: var(--vh2o-space-3);
+  width: 100%;
+  min-height: 56px;
+  padding: 0 var(--vh2o-space-4);
+  border: 0;
+  background: none;
+  color: var(--vh2o-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-@media (orientation: landscape) {
-  html[data-size="tablet"] .vh2o-menu-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+.vh2o-menu-row-name {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .vh2o-menu-items {
@@ -388,13 +466,8 @@ html[data-size="desktop"] .vh2o-menu-items {
 }
 
 .vh2o-menu-cat-link[aria-current="true"] {
-  background: var(--vh2o-surface);
-  color: var(--vh2o-text);
-  box-shadow: inset 3px 0 0 var(--vh2o-accent);
-}
-
-.vh2o-menu-cat-emoji {
-  font-size: 20px;
+  background: var(--vh2o-accent-tint);
+  color: var(--vh2o-accent-soft);
 }
 
 .vh2o-menu-cat-count {
@@ -557,7 +630,7 @@ html[data-size="desktop"] .vh2o-admin-rows {
   max-width: 85%;
   padding: 8px 12px;
   border-radius: 12px 12px 2px 12px;
-  background: rgba(56, 189, 248, 0.14);
+  background: var(--vh2o-accent-tint);
   color: var(--vh2o-text);
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -623,8 +696,38 @@ html[data-size="desktop"] .vh2o-admin-rows {
 }
 
 .vh2o-chip[aria-pressed="true"] {
-  background: rgba(56, 189, 248, 0.14);
-  border-color: rgba(56, 189, 248, 0.5);
+  background: var(--vh2o-accent-tint);
+  border-color: var(--vh2o-accent);
+  color: var(--vh2o-accent-soft);
+}
+
+/* Admin sections switcher (Customers / Edit menu & hours): two equal, full-width buttons. */
+.vh2o-admin-subnav {
+  display: flex;
+  gap: var(--vh2o-space-2);
+  margin-bottom: var(--vh2o-space-2);
+}
+
+.vh2o-admin-subnav button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--vh2o-space-2);
+  min-height: 48px;
+  border: 1px solid var(--vh2o-border);
+  border-radius: 14px;
+  background: var(--vh2o-surface);
+  color: var(--vh2o-text-muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.vh2o-admin-subnav button[aria-pressed="true"] {
+  background: var(--vh2o-accent-tint);
+  border-color: var(--vh2o-accent);
   color: var(--vh2o-text);
 }
 
@@ -648,6 +751,10 @@ html[data-size="desktop"] .vh2o-admin-rows {
 
 .vh2o-admin-rows {
   display: grid;
+  /* max-content, not auto: each row is role="button", whose 44px min-height (Accessibility, below)
+     replaces the content-based minimum, so auto rows shrank to 44px and overlapped once the
+     results outgrew the scrolling list. */
+  grid-auto-rows: max-content;
   gap: 6px;
   align-content: start;
 }
@@ -668,7 +775,8 @@ html[data-size="desktop"] .vh2o-admin-rows {
 }
 
 .vh2o-admin-row[aria-current="true"] {
-  border-color: rgba(56, 189, 248, 0.6);
+  border-color: var(--vh2o-accent);
+  background: var(--vh2o-accent-tint);
   box-shadow: inset 3px 0 0 var(--vh2o-accent);
 }
 
@@ -714,18 +822,18 @@ html[data-size="desktop"] .vh2o-admin-rows {
 }
 
 .vh2o-status-pill.is-active {
-  background: rgba(52, 211, 153, 0.15);
+  background: var(--vh2o-success-tint);
   color: var(--vh2o-success);
 }
 
 .vh2o-status-pill.is-inactive {
-  background: rgba(148, 163, 184, 0.15);
+  background: var(--vh2o-neutral-tint);
   color: var(--vh2o-text-muted);
 }
 
 .vh2o-status-pill.is-nologin {
-  background: rgba(251, 191, 36, 0.14);
-  color: #fbbf24;
+  background: var(--vh2o-warning-tint);
+  color: var(--vh2o-warning);
 }
 
 .vh2o-admin-detail-panel {

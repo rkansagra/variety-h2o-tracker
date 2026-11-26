@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { House, IceCreamCone, MapPin, Settings } from "lucide-react";
-import img from '../assets/Variety-H2O-+-Ice-Cream-Logo-Final.png';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { House, IceCreamCone, MapPin, Settings, Store, Users } from "lucide-react";
 import { useUser } from "../userContext";
 import { ICON_SIZE, buttonProps, useSizeClass } from "../lib/ui";
 import { initialsFor } from "../lib/format";
@@ -11,45 +10,101 @@ import TrackerTab from "./tabs/TrackerTab";
 import MenuTab from "./tabs/MenuTab";
 import LocationTab from "./tabs/LocationTab";
 import SettingsTab from "./tabs/SettingsTab";
+import AdminPanel from "../admin/AdminPanel";
+import MenuEditor from "../admin/MenuEditor";
+import BrandLogo from "../components/BrandLogo";
 
-// The logo file's pixel size (1080px wide: the 360px-max banner at 3x).
-const LOGO_WIDTH = 1080;
-const LOGO_HEIGHT = 470;
+// The four sections, each its own URL. The first one is Home for customers and Customers for the
+// admin; its DOM IDs stay `tracker` either way (TEST_IDS.md).
+function navItems(isAdmin, adminPath) {
+  return [
+    isAdmin
+      ? { key: "tracker", to: adminPath, match: "/admin", icon: Users, label: "Customers" }
+      : { key: "tracker", to: "/", match: "/", icon: House, label: "Home" },
+    { key: "menu", to: "/menu", match: "/menu", icon: IceCreamCone, label: "Menu" },
+    { key: "locations", to: "/location", match: "/location", icon: MapPin, label: "Location" },
+    { key: "settings", to: "/settings", match: "/settings", icon: Settings, label: "Settings" },
+  ];
+}
 
-// The signed-in (or browsing) app: logo banner or desktop top bar, the active tab, and the bottom
-// tab bar. Tabs are state here, not routes.
+function isActive(pathname, match) {
+  return match === "/" ? pathname === "/" : pathname === match || pathname.startsWith(`${match}/`);
+}
+
+// `/`: a customer's Home, and the admin goes to Customers. Signed out, opening the site lands on
+// the menu, but tapping Home later shows a sign-in prompt instead of silently redirecting.
+// React Router gives the first location of a visit the key "default".
+function HomeRoute({ sizeClass }) {
+  const { currentUser, isLoading } = useUser();
+  const location = useLocation();
+  if (!isLoading && !currentUser && location.key === "default") return <Navigate to="/menu" replace />;
+  if (currentUser?.role === "admin") return <Navigate to="/admin" replace />;
+  return <TrackerTab sizeClass={sizeClass} />;
+}
+
+// `/admin`, `/admin/customers/:customerId`, and `/admin/menu`: admin only. The selected customer
+// lives in the URL, so the browser's back button (and Android's) goes from a customer back to the
+// list. A switcher at the top moves between Customers and "Menu & hours".
+function AdminRoute({ adminView, sizeClass, page = "customers" }) {
+  const { currentUser, isLoading } = useUser();
+  const { customerId } = useParams();
+  const navigate = useNavigate();
+  if (isLoading) return null;
+  if (currentUser?.role !== "admin") return <Navigate to="/" replace />;
+  const selectedCustomerId = customerId && /^\d+$/.test(customerId) ? Number(customerId) : null;
+  return (
+    <div id="vh2o-tracker-home">
+      <div id="vh2o-tracker-section" style={styles.rewardsList}>
+        <div id="vh2o-admin-subnav" className="vh2o-admin-subnav" role="group" aria-label="Admin sections">
+          <button id="vh2o-admin-subnav-customers" type="button"
+            aria-pressed={page === "customers"} onClick={() => navigate("/admin")}>
+            <Users size={ICON_SIZE.inline + 4} aria-hidden="true" /> Customers
+          </button>
+          <button id="vh2o-admin-subnav-menu" type="button"
+            aria-pressed={page === "menu"} onClick={() => navigate("/admin/menu")}>
+            <Store size={ICON_SIZE.inline + 4} aria-hidden="true" /> Edit menu &amp; hours
+          </button>
+        </div>
+        {page === "menu"
+          ? <MenuEditor />
+          : <AdminPanel view={{ ...adminView, selectedCustomerId }} sizeClass={sizeClass} />}
+      </div>
+    </div>
+  );
+}
+
+// The signed-in (or browsing) app: logo banner or desktop top bar, the current section, and the
+// bottom tab bar. Each section is a route under this one.
 export function MainApp() {
   const { currentUser, isBiometricLocked } = useUser();
-  const [activeTab, setActiveTab] = useState("menu"); // Start with menu when logged out
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isAdmin = currentUser?.role === "admin";
 
-  // Switch to Home on login, Menu on logout. Adjusted during render (not an effect) so a
-  // data refresh that produces a new `currentUser` object for the *same* logged-in account
-  // (e.g. after crediting a customer) doesn't yank the admin back to the tracker tab.
-  const currentUserId = currentUser?.id ?? null;
-  const [prevUserId, setPrevUserId] = useState(currentUserId);
-  if (currentUserId !== prevUserId) {
-    setPrevUserId(currentUserId);
-    setActiveTab(currentUserId ? "tracker" : "menu");
-  }
-
+  // Kept here rather than in AdminPanel so the admin's search, filter, sort, and assistant
+  // conversation survive visiting the other sections. The selected customer is in the URL
+  // instead; `adminPath` remembers it, so the Customers tab returns to the customer you had open.
+  // The search text stays out of the URL on purpose: it often holds a customer's name, and
+  // URLs end up in browser history.
   const [searchQuery, setSearchQuery] = useState("");
   const [adminFilter, setAdminFilter] = useState("all");
   const [adminSort, setAdminSort] = useState("name");
-  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
-  // Phone only: the list and a customer's details are separate views.
-  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
-  // "Ask the ledger" conversation: [{ question, answer, toolCalls }].
   const [assistantTurns, setAssistantTurns] = useState([]);
-  // Kept here rather than in AdminPanel so the admin's search, selection, and assistant
-  // conversation survive switching tabs.
+  const [adminPath, setAdminPath] = useState("/admin");
+  const onAdminPage = isActive(location.pathname, "/admin");
+  // Adjusted during render rather than in an effect, so the Customers tab's target is right on
+  // the same render that shows the page.
+  if (onAdminPage && adminPath !== location.pathname) {
+    setAdminPath(location.pathname);
+  }
   const adminView = {
     searchQuery, setSearchQuery, adminFilter, setAdminFilter, adminSort, setAdminSort,
-    selectedCustomerId, setSelectedCustomerId, showCustomerDetail, setShowCustomerDetail,
     assistantTurns, setAssistantTurns,
   };
+
   const sizeClass = useSizeClass();
   const isDesktop = sizeClass === "desktop";
-  const navigate = useNavigate();
+  const items = navItems(isAdmin, adminPath);
 
   if (currentUser && isBiometricLocked) {
     return <BiometricLockScreen />;
@@ -63,25 +118,20 @@ export function MainApp() {
       <div id="vh2o-app-phone" className="vh2o-phone" style={styles.phone}>
 
         {isDesktop ? (
-          // Desktop: a top bar replaces both the logo banner and the bottom tab bar.
+          // Desktop: one top bar with the logo and the tabs (no bottom tab bar).
           <header id="vh2o-top-nav" className="vh2o-topbar">
-            <img id="vh2o-top-nav-logo" className="vh2o-topbar-logo" src={img} alt="Variety H2O + Ice Cream" width={LOGO_WIDTH} height={LOGO_HEIGHT} />
+            <BrandLogo id="vh2o-top-nav-logo" className="vh2o-topbar-logo" />
             <nav aria-label="Main" className="vh2o-topbar-tabs">
-              {[
-                ["tracker", House, "Home"],
-                ["menu", IceCreamCone, "Menu"],
-                ["locations", MapPin, "Location"],
-                ["settings", Settings, "Settings"],
-              ].map(([tab, icon, label]) => {
+              {items.map(({ key, to, match, icon, label }) => {
                 const TabIcon = icon;
                 return (
                 <button
-                  key={tab}
-                  id={`vh2o-top-nav-${tab}`}
+                  key={key}
+                  id={`vh2o-top-nav-${key}`}
                   type="button"
                   className="vh2o-topbar-tab"
-                  aria-current={activeTab === tab ? "page" : undefined}
-                  onClick={() => setActiveTab(tab)}
+                  aria-current={isActive(location.pathname, match) ? "page" : undefined}
+                  onClick={() => navigate(to)}
                 >
                   <TabIcon size={18} aria-hidden="true" />
                   {label}
@@ -105,45 +155,56 @@ export function MainApp() {
             </div>
           </header>
         ) : (
-          /* Wavy header */
-          <div id="vh2o-app-header" style={styles.header}>
-            <div style={styles.headerBg} />
-            <div style={styles.headerContent}>
-              <div style={styles.storeName}>
-                  {/* width/height are the file's own size, so the browser reserves the space before it loads. */}
-                  <img id="vh2o-app-header-logo" className="vh2o-banner-logo" src={img} alt="Variety H2O + Ice Cream" width={LOGO_WIDTH} height={LOGO_HEIGHT} style={{ width: "100%", height: "auto" }}/>
-              </div>
-            </div>
-          </div>
+          // Phone and tablet: a slim bar with the logo; the tabs are at the bottom.
+          <header id="vh2o-app-header" className="vh2o-appbar">
+            <BrandLogo id="vh2o-app-header-logo" className="vh2o-appbar-logo" />
+            {currentUser && (
+              <button id="vh2o-app-header-account" type="button" className="vh2o-appbar-avatar"
+                aria-label="Settings" onClick={() => navigate("/settings")}>
+                {initialsFor(currentUser.name, currentUser.email)}
+              </button>
+            )}
+          </header>
         )}
 
-        {/* Tab content */}
+        {/* Current section */}
         <div
           id="vh2o-app-content"
-          className={`vh2o-content${activeTab === "tracker" && currentUser?.role === "admin" ? " vh2o-content--wide" : ""}`}
+          className={`vh2o-content${onAdminPage ? " vh2o-content--wide" : ""}`}
           style={styles.content}
         >
-          {activeTab === "tracker" && <TrackerTab adminView={adminView} sizeClass={sizeClass} />}
-          {activeTab === "menu" && <MenuTab isDesktop={isDesktop} />}
-          {activeTab === "locations" && <LocationTab />}
-          {activeTab === "settings" && <SettingsTab />}
+          <Routes>
+            <Route index element={<HomeRoute sizeClass={sizeClass} />} />
+            <Route path="menu" element={<MenuTab isDesktop={isDesktop} />} />
+            <Route path="menu/:categoryId" element={<MenuTab isDesktop={isDesktop} />} />
+            <Route path="location" element={<LocationTab />} />
+            <Route path="settings" element={<SettingsTab />} />
+            <Route path="admin" element={<AdminRoute adminView={adminView} sizeClass={sizeClass} />} />
+            <Route path="admin/customers/:customerId" element={<AdminRoute adminView={adminView} sizeClass={sizeClass} />} />
+            <Route path="admin/menu" element={<AdminRoute adminView={adminView} sizeClass={sizeClass} page="menu" />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
 
         {/* Bottom nav bar (phone and tablet; desktop uses the top bar) */}
         {!isDesktop && (
         <nav id="vh2o-bottom-nav" aria-label="Main" style={styles.bottomNav}>
-          <div id="vh2o-bottom-nav-tracker" style={{ ...styles.navItem, ...(activeTab === "tracker" ? styles.navItemActive : {}) }} {...buttonProps(() => setActiveTab("tracker"))} aria-current={activeTab === "tracker" ? "page" : undefined}>
-            <House size={ICON_SIZE.md} color={activeTab === "tracker" ? "var(--vh2o-accent)" : "var(--vh2o-text-subtle)"} aria-hidden="true" /><span style={{ ...styles.navLabel, ...(activeTab === "tracker" ? { color: "var(--vh2o-accent)" } : {}) }}>Home</span>
-          </div>
-          <div id="vh2o-bottom-nav-menu" style={{ ...styles.navItem, ...(activeTab === "menu" ? styles.navItemActive : {}) }} {...buttonProps(() => setActiveTab("menu"))} aria-current={activeTab === "menu" ? "page" : undefined}>
-            <IceCreamCone size={ICON_SIZE.md} color={activeTab === "menu" ? "var(--vh2o-accent)" : "var(--vh2o-text-subtle)"} aria-hidden="true" /><span style={{ ...styles.navLabel, ...(activeTab === "menu" ? { color: "var(--vh2o-accent)" } : {}) }}>Menu</span>
-          </div>
-          <div id="vh2o-bottom-nav-locations" style={{ ...styles.navItem, ...(activeTab === "locations" ? styles.navItemActive : {}) }} {...buttonProps(() => setActiveTab("locations"))} aria-current={activeTab === "locations" ? "page" : undefined}>
-            <MapPin size={ICON_SIZE.md} color={activeTab === "locations" ? "var(--vh2o-accent)" : "var(--vh2o-text-subtle)"} aria-hidden="true" /><span style={{ ...styles.navLabel, ...(activeTab === "locations" ? { color: "var(--vh2o-accent)" } : {}) }}>Location</span>
-          </div>
-          <div id="vh2o-bottom-nav-settings" style={{ ...styles.navItem, ...(activeTab === "settings" ? styles.navItemActive : {}) }} {...buttonProps(() => setActiveTab("settings"))} aria-current={activeTab === "settings" ? "page" : undefined}>
-            <Settings size={ICON_SIZE.md} color={activeTab === "settings" ? "var(--vh2o-accent)" : "var(--vh2o-text-subtle)"} aria-hidden="true" /><span style={{ ...styles.navLabel, ...(activeTab === "settings" ? { color: "var(--vh2o-accent)" } : {}) }}>Settings</span>
-          </div>
+          {items.map(({ key, to, match, icon, label }) => {
+            const TabIcon = icon;
+            const active = isActive(location.pathname, match);
+            return (
+              <div
+                key={key}
+                id={`vh2o-bottom-nav-${key}`}
+                style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
+                {...buttonProps(() => navigate(to))}
+                aria-current={active ? "page" : undefined}
+              >
+                <TabIcon size={ICON_SIZE.md} color={active ? "var(--vh2o-accent)" : "var(--vh2o-text-subtle)"} aria-hidden="true" />
+                <span style={{ ...styles.navLabel, ...(active ? { color: "var(--vh2o-accent)" } : {}) }}>{label}</span>
+              </div>
+            );
+          })}
         </nav>
         )}
       </div>

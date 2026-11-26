@@ -404,3 +404,96 @@ describe("Admin customer actions", () => {
     expect(document.getElementById("vh2o-admin-user-history-btn-1099")).toBeInTheDocument();
   });
 });
+
+describe("Admin history: correcting a mistake", () => {
+  beforeEach(() => setWindow(1440, 900));
+
+  const HISTORY = [
+    // Newest first, like fetchUserHistory(): a correction of #3, then #3 itself, a fill, a purchase, a forfeit-free history.
+    { id: 4, amount: 50, previousBalance: 45, newBalance: 95, note: "Rang up 50 instead of 5", displayTime: "today", type: "credit", kind: "correction", correctsTransactionId: 3 },
+    { id: 3, amount: -50, previousBalance: 95, newBalance: 45, note: "", displayTime: "today", type: "debit", kind: "fill", correctsTransactionId: null },
+    { id: 2, amount: -5, previousBalance: 100, newBalance: 95, note: "", displayTime: "today", type: "debit", kind: "fill", correctsTransactionId: null },
+    { id: 1, amount: 100, previousBalance: 0, newBalance: 100, note: "Paid for 100", displayTime: "today", type: "credit", kind: "purchase", correctsTransactionId: null },
+  ];
+
+  async function openHistoryFor(user, context) {
+    await openHome(user);
+    await user.type(document.getElementById("vh2o-admin-user-search-input"), "alex");
+    await user.click(await findById("vh2o-admin-customer-row-1042"));
+    await user.click(await findById("vh2o-admin-user-history-btn-1042"));
+    await findById("vh2o-admin-history-row-1");
+    return context;
+  }
+
+  it("labels entries by kind and offers a correction only for uncorrected purchases and fills", async () => {
+    const user = userEvent.setup();
+    const context = renderAdmin({ fetchUserHistory: vi.fn(async () => ({ ok: true, transactions: HISTORY })) });
+    await openHistoryFor(user, context);
+
+    expect(document.getElementById("vh2o-admin-history-row-4")).toHaveTextContent("Correction 50 gal");
+    expect(document.getElementById("vh2o-admin-history-row-4")).toHaveTextContent("Rang up 50 instead of 5");
+    expect(document.getElementById("vh2o-admin-history-corrected-3")).toHaveTextContent("Corrected");
+    // Not for the correction itself, nor the entry it already reversed.
+    expect(document.getElementById("vh2o-admin-history-correct-btn-4")).toBeNull();
+    expect(document.getElementById("vh2o-admin-history-correct-btn-3")).toBeNull();
+    expect(document.getElementById("vh2o-admin-history-correct-btn-2")).toBeInTheDocument();
+    expect(document.getElementById("vh2o-admin-history-correct-btn-1")).toBeInTheDocument();
+  });
+
+  it("records a correction with the required note, then reloads the history and the customer", async () => {
+    const user = userEvent.setup();
+    const context = renderAdmin({
+      fetchUserHistory: vi.fn(async () => ({ ok: true, transactions: HISTORY })),
+      correctTransaction: vi.fn(async () => ({ ok: true })),
+    });
+    await openHistoryFor(user, context);
+    const historyLoads = context.fetchUserHistory.mock.calls.length;
+    const customerLoads = context.getCustomer.mock.calls.length;
+
+    await user.click(document.getElementById("vh2o-admin-history-correct-btn-2"));
+    const submit = document.getElementById("vh2o-admin-history-correct-submit-2");
+    expect(submit).toBeDisabled();
+    await user.type(document.getElementById("vh2o-admin-history-correct-note-2"), "Wrong customer");
+    await user.click(submit);
+
+    expect(context.correctTransaction).toHaveBeenCalledWith(2, "Wrong customer");
+    await waitFor(() => expect(context.fetchUserHistory.mock.calls.length).toBeGreaterThan(historyLoads));
+    await waitFor(() => expect(context.getCustomer.mock.calls.length).toBeGreaterThan(customerLoads));
+    expect(document.getElementById("vh2o-admin-history-correct-form-2")).toBeNull();
+  });
+
+  it("keeps the form open with the server's refusal", async () => {
+    const user = userEvent.setup();
+    const context = renderAdmin({
+      fetchUserHistory: vi.fn(async () => ({ ok: true, transactions: HISTORY })),
+      correctTransaction: vi.fn(async () => ({ ok: false, message: "Can't correct: the balance would go below zero (the customer has 95 gallons)" })),
+    });
+    await openHistoryFor(user, context);
+
+    await user.click(document.getElementById("vh2o-admin-history-correct-btn-1"));
+    await user.type(document.getElementById("vh2o-admin-history-correct-note-1"), "Wrong customer");
+    await user.click(document.getElementById("vh2o-admin-history-correct-submit-1"));
+
+    expect(await findById("vh2o-admin-history-correct-error")).toHaveTextContent("below zero");
+    expect(document.getElementById("vh2o-admin-history-correct-form-1")).toBeInTheDocument();
+  });
+
+  it("hides 'Member since' when the join date is unknown, and shows it when known", async () => {
+    const user = userEvent.setup();
+    renderAdmin({
+      customers: [
+        customer({ id: 1201, name: "Nell Unknown", memberSince: null }),
+        customer({ id: 1202, name: "Nora Known", memberSince: "March 2024" }),
+      ],
+    });
+    await openHome(user);
+    await user.type(document.getElementById("vh2o-admin-user-search-input"), "nell");
+    await user.click(await findById("vh2o-admin-customer-row-1201"));
+    expect(await findById("vh2o-admin-user-card-1201")).not.toHaveTextContent("Member since");
+
+    await user.clear(document.getElementById("vh2o-admin-user-search-input"));
+    await user.type(document.getElementById("vh2o-admin-user-search-input"), "nora");
+    await user.click(await findById("vh2o-admin-customer-row-1202"));
+    expect(await findById("vh2o-admin-user-card-1202")).toHaveTextContent("Member since March 2024");
+  });
+});

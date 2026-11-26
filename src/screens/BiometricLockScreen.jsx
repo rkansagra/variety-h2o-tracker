@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { Lock } from "lucide-react";
 import { useUser } from "../userContext";
 import { biometryLabel } from "../lib/biometrics";
-import { ICON_SIZE } from "../lib/ui";
 import { styles, css } from "../styles";
+import BrandLogo from "../components/BrandLogo";
 
 // Shown instead of the app whenever a signed-in user has biometric lock turned on and the app
 // has just launched or come back to the foreground. Auto-prompts on mount so the OS Face
@@ -37,12 +36,10 @@ export default function BiometricLockScreen() {
     <div id="vh2o-biometric-lock-root" className="vh2o-root vh2o-auth" style={styles.root}>
       <style>{css}</style>
       <div id="vh2o-biometric-lock-phone" className="vh2o-phone" style={styles.phone}>
-        <div style={{ padding: "60px 20px", textAlign: "center" }}>
-          <div style={styles.storeName}>
-            <Lock size={ICON_SIZE.md} aria-hidden="true" />
-            <span>Variety H2O + Ice Cream</span>
-          </div>
-          <p id="vh2o-biometric-lock-message" style={{ color: "var(--vh2o-text-subtle)", margin: "30px 0" }}>
+        <div style={{ padding: "48px 24px 32px" }}>
+          <BrandLogo className="vh2o-auth-logo" />
+          <h1 style={styles.pageTitle}>Locked</h1>
+          <p id="vh2o-biometric-lock-message" style={{ ...styles.pageSubtitle, fontSize: 15, margin: "6px 0 24px" }}>
             Unlock with {biometryLabel(biometryType)} to continue.
           </p>
           <button id="vh2o-biometric-lock-unlock-btn" onClick={attemptUnlock} style={styles.loginBtn}>

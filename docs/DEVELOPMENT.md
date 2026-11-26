@@ -10,7 +10,7 @@ From the repo root:
 
 ```bash
 npm install
-cp .env.example .env   # then set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+cp .env.example .env   # then set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (VITE_SENTRY_DSN optional)
 npm run dev
 ```
 
@@ -32,20 +32,26 @@ npm run test:coverage
 ## Code map
 
 - `src/main.jsx`: bootstrap. Locks portrait on phone-sized native screens and mounts the app.
-- `src/App.jsx`: providers and routes only (`/`, `/login`, `/forgot-password`, `/no-account`).
+- `src/App.jsx`: providers and the top-level routes: the sign-in screens (`/login`,
+  `/forgot-password`, `/no-account`), and `/*` for `MainApp`.
 - `src/UserProvider.jsx`: the only module that reads or writes app data in Supabase. It owns the
   session, the signed-in user's own profile and recent history, every write action, the admin's
   customer search, and the biometric lock. Components read it with `useUser()` from
   `src/userContext.js`.
 - `src/screens/`: one component per route (`Login`, `ForgotPassword`, `NoAccount`, `MainApp`),
   plus `BiometricLockScreen` and `UnlinkedSessionRedirect`.
-- `src/screens/tabs/`: MainApp's four tabs: Home (`TrackerTab`), `MenuTab`, `LocationTab`,
-  `SettingsTab`. In-app navigation is tab state in `MainApp`, not routes.
-- `src/admin/`: the admin's customer panel (`AdminPanel`), customer card (`AdminUserRow`), and the
-  "Ask the ledger" assistant panel.
-- `src/menu/menuData.js`: menu categories and prices (real business data from the POS catalog).
+- `src/screens/tabs/`: the sections MainApp routes to: Home at `/` (`TrackerTab`), `/menu` and
+  `/menu/:categoryId` (`MenuTab`), `/location` (`LocationTab`), and `/settings` (`SettingsTab`).
+  The admin's panel is at `/admin` and `/admin/customers/:customerId`, and the menu & hours editor
+  at `/admin/menu`. Each section is a real URL,
+  so the back button, refresh, and links work.
+- `src/admin/`: the admin's customer panel (`AdminPanel`), customer card (`AdminUserRow`), the
+  menu & hours editor (`MenuEditor`), and the "Ask the ledger" assistant panel.
+- `src/MenuProvider.jsx`: loads the menu and store info from the database for everyone, keeps the
+  last copy for offline use, and saves the admin's edits. The starting data is
+  `supabase/seed/menu.sql` (real business data from the POS catalog).
 - `src/lib/`: pure helpers and hooks: customer mapping, layout size classes (`useSizeClass()`),
-  formatting, store info, URLs, and `supabaseClient.js`.
+  formatting, menu mapping and editor parsing (`menu.js`), URLs, and `supabaseClient.js`.
 - `src/styles.js` and `src/index.css`: shared inline style objects, design tokens
   (`--vh2o-*`), and size-class layout rules.
 - `supabase/schema.sql`: the whole database, idempotent and runnable from scratch: tables, RLS,
@@ -70,6 +76,10 @@ fallback for customer data.
 - **Balance changes** go only through `admin_adjust_gallons()`: admin-only, row-locked, never below
   zero, and always paired with a ledger row. Signed-in users can't write `gallons` (or any column
   but `water_type`) directly.
+- **Ledger entries** carry a `kind` (purchase, fill, correction, forfeit), kept consistent with the
+  amount by a check constraint. Mistakes are reversed by `admin_correct_transaction()` with a
+  linked correction entry, never edited; corrected entries and corrections aren't visits.
+- **`member_since`** is a date; null means unknown and the app hides it.
 
 ## Tests
 
@@ -92,6 +102,8 @@ SECURITY DEFINER functions. Each seeds its own synthetic data and rolls back:
   links directly; the ledger function still works.
 - `signup.test.sql`: `link_my_profile()` links only confirmed, password-less logins to unlinked
   customer records; the admin email and add-customer functions refuse bad input and non-admins.
+- `ledger.test.sql`: entry kinds, corrections (note required, once per entry, never below zero,
+  admin-only, not a visit), the kind/amount constraint, and `member_since` as a date.
 - `admin_lists.test.sql`: search matching, filters, sorting, the 3-character minimum, wildcard
   escaping, and admin-only access.
 - `assistant_tools.test.sql`: the assistant's functions are read-only and admin-only.

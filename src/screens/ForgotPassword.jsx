@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { KeyRound } from "lucide-react";
-import { ICON_SIZE } from "../lib/ui";
 import { useUser } from "../userContext";
 import { styles } from "../styles";
 import PrivacyPolicyLink from "../components/PrivacyPolicyLink";
+import BrandLogo from "../components/BrandLogo";
 
 // Step 1 of a password reset: request the emailed link. The link returns to /login (the address on
 // Supabase's Redirect URLs allow list), where isPasswordRecovery shows step 2, choosing a new password.
@@ -32,12 +31,10 @@ export function ForgotPassword() {
   return (
     <div id="vh2o-forgot-root" className="vh2o-root vh2o-auth" style={styles.root}>
       <div id="vh2o-forgot-phone" className="vh2o-phone" style={styles.phone}>
-        <div id="vh2o-forgot-content" style={{ padding: "40px 20px", textAlign: "center" }}>
-          <div id="vh2o-forgot-title" style={styles.storeName}>
-            <KeyRound size={ICON_SIZE.md} aria-hidden="true" />
-            <span>Reset Password</span>
-          </div>
-          <p style={{ color: "var(--vh2o-text-muted)", fontSize: 14, margin: "24px 0 20px" }}>
+        <div id="vh2o-forgot-content" style={{ padding: "48px 24px 32px" }}>
+          <BrandLogo className="vh2o-auth-logo" />
+          <h1 id="vh2o-forgot-title" style={styles.pageTitle}>Reset your password</h1>
+          <p style={{ ...styles.pageSubtitle, fontSize: 15, lineHeight: "22px", margin: "6px 0 20px" }}>
             Enter your account email and we'll send you a link to choose a new password.
           </p>
           <form onSubmit={handleSubmit}>

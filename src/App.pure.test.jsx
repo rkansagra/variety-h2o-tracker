@@ -3,9 +3,9 @@ import { BiometryType } from "@aparajita/capacitor-biometric-auth";
 import { Capacitor } from "@capacitor/core";
 // None of these modules import the Supabase client, so no mock is needed here.
 import {
-  mapProfileToUser, isActiveCustomer, mapTransactionToNotification, capNotificationsPerUser,
+  mapProfileToUser, isActiveCustomer, mapTransactionToNotification, capNotificationsPerUser, ledgerLabel,
 } from "./lib/customers.js";
-import { slugify } from "./lib/format.js";
+import { formatMemberSince, slugify } from "./lib/format.js";
 import { biometryLabel } from "./lib/biometrics.js";
 import { authRedirectUrl } from "./lib/urls.js";
 import { buttonProps } from "./lib/ui.js";
@@ -61,7 +61,7 @@ describe("mapProfileToUser", () => {
       role: "admin",
       gallons: 12,
       name: "Jane",
-      member_since: "1/1/2024",
+      member_since: "2024-01-01",
       legacy_id: 42,
       water_type: "purified",
       last_transaction_at: "2026-01-01T00:00:00Z",
@@ -77,7 +77,7 @@ describe("mapProfileToUser", () => {
       role: "admin",
       gallons: 12,
       name: "Jane",
-      memberSince: "1/1/2024",
+      memberSince: "January 2024",
       waterType: "purified",
       lastTransactionAt: "2026-01-01T00:00:00Z",
       anonymizedAt: "2026-02-01T00:00:00Z",
@@ -90,9 +90,10 @@ describe("mapProfileToUser", () => {
     expect(mapProfileToUser({ role: undefined, legacy_id: 1 }).role).toBe("user");
   });
 
-  it("falls back memberSince to 'N/A' when unset", () => {
-    const user = mapProfileToUser({ legacy_id: 1, member_since: null });
-    expect(user.memberSince).toBe("N/A");
+  // Unknown join dates (most imported customers) are hidden, not shown as "N/A".
+  it("leaves memberSince null when unknown", () => {
+    expect(mapProfileToUser({ legacy_id: 1, member_since: null }).memberSince).toBeNull();
+    expect(mapProfileToUser({ legacy_id: 1, member_since: "N/A" }).memberSince).toBeNull();
   });
 });
 
@@ -227,5 +228,37 @@ describe("biometryLabel", () => {
   it("falls back to a generic label for none/unrecognized types", () => {
     expect(biometryLabel(BiometryType.none)).toBe("Biometric unlock");
     expect(biometryLabel(BiometryType.irisAuthentication)).toBe("Biometric unlock");
+  });
+});
+
+describe("formatMemberSince", () => {
+  it("shows the month and year of a member_since date", () => {
+    expect(formatMemberSince("2024-03-14")).toBe("March 2024");
+  });
+
+  // Parsed as a local calendar date: the first of the month must not slip into the previous one
+  // in a time zone behind UTC (Tucson is UTC-7).
+  it("never shifts the first of a month into the previous month", () => {
+    expect(formatMemberSince("2025-01-01")).toBe("January 2025");
+  });
+
+  it("returns null for missing or non-date values", () => {
+    expect(formatMemberSince(null)).toBeNull();
+    expect(formatMemberSince("N/A")).toBeNull();
+    expect(formatMemberSince("March 2024")).toBeNull();
+  });
+});
+
+describe("ledgerLabel", () => {
+  it("names each kind of ledger entry", () => {
+    expect(ledgerLabel("purchase", 10)).toBe("Bought");
+    expect(ledgerLabel("fill", -5)).toBe("Filled");
+    expect(ledgerLabel("correction", 50)).toBe("Correction");
+    expect(ledgerLabel("forfeit", -4)).toBe("Balance forfeited");
+  });
+
+  it("falls back to the sign for an entry without a kind", () => {
+    expect(ledgerLabel(null, 10)).toBe("Bought");
+    expect(ledgerLabel(undefined, -5)).toBe("Filled");
   });
 });

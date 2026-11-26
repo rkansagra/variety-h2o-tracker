@@ -32,9 +32,12 @@ installable web app
 - **Staff** look up a customer, record "Bought" or "Filled", add new customers, and handle
   account-deletion requests. An admin-only assistant answers plain-language questions about the
   ledger ("Who hasn't come in for 60 days?").
-- **Everyone** can browse the menu and find the store.
+- **Everyone** can browse the menu and find the store. The menu, prices, and hours live in the
+  database and the owners edit them in the app, with every change logged; offline, the app shows
+  the last menu it loaded.
 - One codebase serves phones, tablets, and desktops, on the web, as an Android app, and as an
   iOS home-screen app.
+- Light by default, dark when the device is: one set of color tokens drives both themes.
 
 About 400 customer records were migrated from the shop's existing list; customers link their own
 login on their next visit.
@@ -56,6 +59,7 @@ flowchart LR
   end
   resend["Resend<br/>SMTP"]
   claude["Claude API"]
+  sentry["Sentry<br/>error reports"]
 
   netlify -->|"serves"| web
   web --> auth
@@ -68,6 +72,9 @@ flowchart LR
   web -->|"admin questions"| assistant
   assistant -->|"read-only functions,<br/>as the caller"| db
   assistant --> claude
+  web -->|"scrubbed errors"| sentry
+  android -->|"scrubbed errors"| sentry
+  netlify -->|"source maps,<br/>at build time"| sentry
 ```
 
 There's no application server. The browser talks to Supabase directly, so the rules that matter
@@ -84,8 +91,9 @@ including the admin, can't update `gallons` at all. Column grants allow writing 
 `water_type`. Every change goes through one function, `admin_adjust_gallons()`. It re-checks that
 the caller is an admin, locks the customer's row so two registers can't race, refuses to go below
 zero, and writes the balance and its ledger row in the same transaction. The ledger and the
-balance can't drift apart. `profile_writes.test.sql` tries each forbidden write and expects the
-database to refuse it.
+balance can't drift apart. A mistake is never edited away: staff record a correction that
+reverses it, linked to the original and with a note saying why. `profile_writes.test.sql` and
+`ledger.test.sql` try each forbidden write and expect the database to refuse it.
 
 ### Passwordless sign-up that links accounts safely
 Staff create the customer record with the customer's email. When the customer later signs in
@@ -109,6 +117,15 @@ the service-role key. They never return email addresses. Every answer lists the 
 so the owners can check where a number came from. `assistant_tools.test.sql` verifies the
 functions are read-only and admin-only.
 
+### Error reports that can't identify a customer
+Production errors from the website and the Android app go to Sentry, minus anything that could
+say whose they were: no user, IP address, cookies, headers, or console output, and every
+remaining string is scrubbed of email addresses and URL query strings (Supabase filters live
+there). That scrubbing has its own tests. Each report names the commit it came from, so Sentry can
+point at the change that likely caused it. Production builds upload source maps for readable stack
+traces, then delete them, so the site never serves them. Development, tests, and preview builds
+send nothing.
+
 ### Layout by window size, not device
 Phone, tablet, and desktop layouts come from the actual window size (`useSizeClass()`), not
 user-agent sniffing. A resized browser window or an iPad in split view gets the right layout.
@@ -121,9 +138,9 @@ Desktop swaps the bottom tab bar for a top bar.
 
 ## Testing
 
-- **141 unit and component tests** (Vitest + React Testing Library) against a hand-built fake of
+- **198 unit and component tests** (Vitest + React Testing Library) against a hand-built fake of
   the Supabase client, so they never touch real data.
-- **4 SQL test suites** for what the client can't check: RLS, grants, and the security-sensitive
+- **6 SQL test suites** for what the client can't check: RLS, grants, and the security-sensitive
   functions. Each seeds synthetic data and rolls back.
 - **CI on every pull request** (GitHub Actions) runs lint, unit tests, and the build. It also
   builds the database from `schema.sql` twice on plain Postgres, proving it re-runs, then runs
@@ -135,12 +152,14 @@ Desktop swaps the bottom tab bar for a top bar.
 ## Tech stack
 
 React 19, Vite, React Router · Supabase (Postgres, Auth, Realtime, Edge Functions) · Capacitor 8
-(Android) · Netlify · Resend · Claude API · Vitest, React Testing Library · GitHub Actions
+(Android) · Netlify · Resend · Claude API · Sentry · Vitest, React Testing Library · GitHub Actions
 
 ## How it was built
 
 Built in 2026 by Rasesh Kansagra for the family business, working with Claude Code as an AI pair
-programmer. Every decision involving customer data, money, or production was the owner's call.
+programmer. Claude Code worked against the live services through MCP servers (Supabase, Netlify,
+Sentry) and browser automation, opening each change as a pull request. Every decision involving
+customer data, money, or production was the owner's call.
 [ROADMAP.md](ROADMAP.md) records each decision and why, including the ones that were tried and
 reversed, from replacing the paper cards to the architecture audit that shaped the current design.
 

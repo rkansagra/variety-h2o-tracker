@@ -13,6 +13,8 @@ vi.mock("./lib/supabaseClient", () => {
 const { NoAccount } = await import("./screens/NoAccount.jsx");
 const { UnlinkedSessionRedirect } = await import("./screens/UnlinkedSessionRedirect.jsx");
 const { UserContext } = await import("./userContext.js");
+const { MenuContext } = await import("./menuContext.js");
+const { MENU_CONTEXT_FIXTURE } = await import("./test/menuFixture.js");
 
 // Pure component tests with a fake UserContext (see Login.test.jsx); UserProvider.test.jsx
 // covers how unlinkedAuthEmail gets set by a real sign-in. Like the real provider, logout()
@@ -33,9 +35,9 @@ function renderAt(path, contextOverrides = {}) {
       setUnlinkedAuthEmail(null);
     };
     return (
-      <UserContext.Provider value={{ ...context, unlinkedAuthEmail, logout }}>
+      <UserContext.Provider value={{ ...context, unlinkedAuthEmail, logout }}><MenuContext.Provider value={MENU_CONTEXT_FIXTURE}>
         {children}
-      </UserContext.Provider>
+      </MenuContext.Provider></UserContext.Provider>
     );
   }
 

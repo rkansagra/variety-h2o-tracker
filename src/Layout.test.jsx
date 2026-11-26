@@ -12,6 +12,8 @@ vi.mock("./lib/supabaseClient", () => {
 const { sizeClassFor, useSizeClass } = await import("./lib/ui.js");
 const { MainApp } = await import("./screens/MainApp.jsx");
 const { UserContext } = await import("./userContext.js");
+const { MenuContext } = await import("./menuContext.js");
+const { MENU_CONTEXT_FIXTURE } = await import("./test/menuFixture.js");
 
 describe("sizeClassFor", () => {
   it("splits by width at 600px and 1024px", () => {
@@ -64,19 +66,19 @@ describe("Customer screens by size class", () => {
   afterEach(() => setWindow(original.width, original.height));
 
   const me = { id: 1042, role: "user", name: "Alex Rivera", email: "alex@example.com", gallons: 342, authUserId: "u1", memberSince: "3/14/2025" };
-  function renderApp() {
+  function renderApp({ currentUser = me, notifications, path = "/" } = {}) {
     const context = {
-      currentUser: me, isLoading: false,
-      notifications: [{ id: 1, userId: 1042, type: "debit", amount: -5, previousBalance: 347, newBalance: 342, displayTime: "Today" }],
+      currentUser, isLoading: false,
+      notifications: notifications ?? [{ id: 1, userId: 1042, type: "debit", amount: -5, previousBalance: 347, newBalance: 342, displayTime: "Today" }],
       logout: vi.fn(), adjustGallons: vi.fn(), fetchUserHistory: vi.fn(), updateWaterType: vi.fn(), setCustomerEmail: vi.fn(),
       biometricAvailable: false, biometryType: 0, biometricLockEnabled: false, isBiometricLocked: false,
       enableBiometricLock: vi.fn(), disableBiometricLock: vi.fn(),
     };
     render(
-      <MemoryRouter>
-        <UserContext.Provider value={context}>
+      <MemoryRouter initialEntries={[path]}>
+        <UserContext.Provider value={context}><MenuContext.Provider value={MENU_CONTEXT_FIXTURE}>
           <MainApp />
-        </UserContext.Provider>
+        </MenuContext.Provider></UserContext.Provider>
       </MemoryRouter>
     );
   }
@@ -84,7 +86,7 @@ describe("Customer screens by size class", () => {
   it("desktop menu: a category list beside the first category's items, switchable", async () => {
     setWindow(1440, 900);
     const user = userEvent.setup();
-    renderApp();
+    renderApp({ path: "/menu" });
 
     expect(document.getElementById("vh2o-menu-categories-grid")).not.toBeInTheDocument();
     expect(document.getElementById("vh2o-menu-category-link-water")).toHaveAttribute("aria-current", "true");
@@ -98,7 +100,7 @@ describe("Customer screens by size class", () => {
   it("phone menu: the category grid first, then a category's items with a way back", async () => {
     setWindow(390, 844);
     const user = userEvent.setup();
-    renderApp();
+    renderApp({ path: "/menu" });
 
     expect(document.getElementById("vh2o-menu-category-list")).not.toBeInTheDocument();
     await user.click(document.getElementById("vh2o-menu-category-card-water"));
@@ -122,6 +124,23 @@ describe("Customer screens by size class", () => {
 
   // Hidden until there's a rewards program: a balance-based tier dropped every time a customer
   // filled up, and unlocked nothing (ROADMAP item L).
+  it("labels a correction in the customer's history, with its note, and hides an unknown join date", async () => {
+    const user = userEvent.setup();
+    renderApp({
+      currentUser: { ...me, memberSince: null },
+      notifications: [
+        { id: 7, userId: 1042, type: "credit", kind: "correction", amount: 50, previousBalance: 292, newBalance: 342, note: "Rang up 50 instead of 5", displayTime: "Today" },
+        { id: 6, userId: 1042, type: "debit", kind: "fill", amount: -50, previousBalance: 342, newBalance: 292, note: "", displayTime: "Today" },
+      ],
+    });
+    await user.click(document.getElementById("vh2o-top-nav-tracker") || document.getElementById("vh2o-bottom-nav-tracker"));
+
+    expect(document.getElementById("vh2o-tracker-notification-card-7")).toHaveTextContent("Correction");
+    expect(document.getElementById("vh2o-tracker-notification-note-7")).toHaveTextContent("Rang up 50 instead of 5");
+    expect(document.getElementById("vh2o-tracker-notification-card-6")).toHaveTextContent("Filled");
+    expect(document.getElementById("vh2o-tracker-member-since")).toBeNull();
+  });
+
   it("shows the customer's balance without a reward-tier badge", async () => {
     const user = userEvent.setup();
     renderApp();

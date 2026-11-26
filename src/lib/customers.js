@@ -1,3 +1,5 @@
+import { formatMemberSince } from "./format.js";
+
 // Also the "Ask the ledger" assistant's default for "inactive" (INACTIVE_DAYS in
 // supabase/functions/admin-assistant/assistant.ts); keep the two in step.
 export const ACTIVE_WINDOW_DAYS = 60;
@@ -13,7 +15,7 @@ export function mapProfileToUser(profile) {
     role: profile.role === "admin" ? "admin" : "user",
     gallons: profile.gallons,
     name: profile.name,
-    memberSince: profile.member_since || "N/A",
+    memberSince: formatMemberSince(profile.member_since),
     waterType: profile.water_type || null,
     lastTransactionAt: profile.last_transaction_at || null,
     anonymizedAt: profile.anonymized_at || null,
@@ -41,10 +43,23 @@ export function mapCustomerRow(row) {
     gallons: row.gallons,
     waterType: row.water_type || null,
     hasLogin: Boolean(row.has_login),
-    memberSince: row.member_since || "N/A",
+    memberSince: formatMemberSince(row.member_since),
     lastTransactionAt: row.last_transaction_at || null,
     anonymizedAt: row.anonymized_at || null,
   };
+}
+
+// What a ledger entry is, for history lists. Older code read this from the sign of the amount;
+// the kind column (ROADMAP item C) says it outright.
+const LEDGER_LABELS = {
+  purchase: "Bought",
+  fill: "Filled",
+  correction: "Correction",
+  forfeit: "Balance forfeited",
+};
+
+export function ledgerLabel(kind, amount) {
+  return LEDGER_LABELS[kind] || (amount > 0 ? "Bought" : "Filled");
 }
 
 export const WATER_TYPE_LABELS = {
@@ -71,6 +86,8 @@ export function mapTransactionToNotification(transaction, usersByProfileId) {
     timestamp: transaction.created_at,
     displayTime: timestamp.toLocaleString(),
     type: transaction.amount > 0 ? "credit" : "debit",
+    kind: transaction.kind || null,
+    correctsTransactionId: transaction.corrects_transaction_id ?? null,
   };
 }
 

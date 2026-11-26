@@ -1,7 +1,10 @@
-// Renders a menu category's icon: an image when the category has `iconSrc`, otherwise its emoji.
-// The image is sized in `em` so it scales with the surrounding font-size like the emoji does.
+// A menu category's mark: a dot in the category's color (ROADMAP item I replaced the emoji with
+// one consistent mark; the app's icons are all Lucide line icons).
 export default function CategoryIcon({ cat }) {
-  return cat.iconSrc
-    ? <img src={cat.iconSrc} alt="" style={{ width: "1.15em", height: "1.15em", objectFit: "contain", verticalAlign: "-0.2em" }} />
-    : cat.icon;
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", flexShrink: 0, background: cat.color }}
+    />
+  );
 }

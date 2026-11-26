@@ -23,6 +23,7 @@ function createQueryBuilder(state, table) {
     is: (...args) => (chain.push(["is", args]), builder),
     insert: (...args) => (chain.push(["insert", args]), builder),
     update: (...args) => (chain.push(["update", args]), builder),
+    delete: (...args) => (chain.push(["delete", args]), builder),
     maybeSingle: (...args) => (chain.push(["maybeSingle", args]), builder),
     // Makes the builder itself awaitable, like the real supabase-js PostgrestFilterBuilder --
     // The app `await`s straight off the end of a chain without a separate execute() call.
